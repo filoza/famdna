@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #060608;
-  --background-alt: #0d0d13;
-  --foreground: #f4f4f5;
-  --muted: #9a9aa5;
-  --orange: #ff9d2e;
-  --orange-soft: #ffc477;
-  --cyan: #2fe6d1;
-  --cyan-soft: #7bf3e4;
-  --border: #1c1c24;
+  --background: #0b0a08;
+  --background-alt: #131110;
+  --foreground: #f3ede1;
+  --muted: #9a9188;
+  --border: #232019;
+  --orange: #e8703f;
+  --orange-soft: #f2a878;
+  --cyan: #2f9e8f;
+  --cyan-soft: #8fd4c6;
+  --sand: #e8ddc4;
 }
 
 @theme inline {
@@ -22,8 +23,10 @@
   --color-cyan: var(--cyan);
   --color-cyan-soft: var(--cyan-soft);
   --color-border: var(--border);
-  --font-display: var(--font-fredoka);
-  --font-sans: var(--font-inter);
+  --color-sand: var(--sand);
+  --font-display: var(--font-bricolage);
+  --font-serif: var(--font-instrument);
+  --font-sans: var(--font-manrope);
 }
 
 body {
@@ -33,33 +36,53 @@ body {
 }
 
 ::selection {
-  background: var(--cyan);
-  color: #05050a;
+  background: var(--orange);
+  color: #0b0a08;
 }
 
 .font-display {
   font-family: var(--font-display), sans-serif;
 }
 
+.font-serif {
+  font-family: var(--font-serif), serif;
+  font-style: italic;
+}
+
 .text-gradient {
-  background-image: linear-gradient(90deg, var(--orange) 0%, var(--orange-soft) 35%, var(--cyan-soft) 65%, var(--cyan) 100%);
+  background-image: linear-gradient(100deg, var(--orange) 0%, var(--orange-soft) 40%, var(--cyan-soft) 65%, var(--cyan) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
+.text-gradient-shimmer {
+  background-image: linear-gradient(100deg, var(--orange) 0%, var(--orange-soft) 30%, var(--cyan-soft) 55%, var(--cyan) 75%, var(--orange) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 7s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 .glow-cyan {
-  box-shadow: 0 0 0 1px rgba(47, 230, 209, 0.25), 0 0 40px rgba(47, 230, 209, 0.15);
+  box-shadow: 0 0 0 1px rgba(47, 158, 143, 0.3), 0 0 50px rgba(47, 158, 143, 0.12);
 }
 
 .glow-orange {
-  box-shadow: 0 0 0 1px rgba(255, 157, 46, 0.25), 0 0 40px rgba(255, 157, 46, 0.15);
+  box-shadow: 0 0 0 1px rgba(232, 112, 63, 0.3), 0 0 50px rgba(232, 112, 63, 0.12);
 }
 
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(to right, rgba(243, 237, 225, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(243, 237, 225, 0.04) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
@@ -68,6 +91,16 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.4;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 26s linear infinite;
 }

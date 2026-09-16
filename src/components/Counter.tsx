@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { motion, useInView, useMotionValue, useSpring } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 
 type CounterProps = {
   value: number;
   suffix?: string;
+  start: boolean;
 };
 
-export default function Counter({ value, suffix = "" }: CounterProps) {
+export default function Counter({ value, suffix = "", start }: CounterProps) {
   const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true, margin: "-80px" });
   const motionValue = useMotionValue(0);
   const spring = useSpring(motionValue, { duration: 1500, bounce: 0 });
 
   useEffect(() => {
-    if (isInView) motionValue.set(value);
-  }, [isInView, motionValue, value]);
+    if (start) motionValue.set(value);
+  }, [start, motionValue, value]);
 
   useEffect(() => {
     return spring.on("change", (latest) => {

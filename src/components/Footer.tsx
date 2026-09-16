@@ -10,7 +10,7 @@ export default function Footer() {
               <span className="text-orange">D.</span>
               <span className="text-cyan">N.A.</span>
             </span>
-            <p className="mt-2 max-w-xs text-sm text-muted">
+            <p className="font-serif mt-2 max-w-xs text-lg text-muted">
               Discovering New Adventures — where curiosity meets motion.
             </p>
           </div>

@@ -1,6 +1,9 @@
 "use client";
 
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 import Reveal from "./Reveal";
+import RevealGroup from "./RevealGroup";
 import Counter from "./Counter";
 
 const METRICS = [
@@ -11,27 +14,33 @@ const METRICS = [
 ];
 
 export default function Impact() {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(rowRef, { once: true, amount: 0.2 });
+
   return (
     <section id="impact" className="relative bg-background py-28">
-      <div className="mx-auto max-w-6xl px-6">
+      <RevealGroup className="mx-auto max-w-6xl px-6">
         <Reveal>
-          <p className="text-center text-xs font-semibold tracking-widest text-cyan-soft uppercase">
-            Our impact
-          </p>
-          <h2 className="font-display mt-4 text-center text-4xl font-semibold sm:text-5xl">
-            Numbers that <span className="text-gradient">move</span>
+          <p className="font-serif text-xl text-orange-soft">our impact</p>
+          <h2 className="font-display mt-4 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
+            Numbers that move
           </h2>
         </Reveal>
 
-        <div className="mt-16 grid grid-cols-2 gap-8 md:grid-cols-4">
+        <div ref={rowRef} className="mt-16 flex flex-col sm:flex-row sm:flex-wrap">
           {METRICS.map((metric, i) => (
-            <Reveal key={metric.label} delay={i * 0.1} className="text-center">
-              <Counter value={metric.value} suffix={metric.suffix} />
-              <p className="mt-2 text-sm text-muted uppercase tracking-wide">{metric.label}</p>
+            <Reveal
+              key={metric.label}
+              className={`w-full border-t border-border py-6 first:border-t-0 sm:w-1/4 sm:border-t-0 sm:py-0 sm:pl-8 ${
+                i > 0 ? "sm:border-l" : ""
+              }`}
+            >
+              <Counter value={metric.value} suffix={metric.suffix} start={inView} />
+              <p className="font-serif mt-2 text-lg text-muted">{metric.label}</p>
             </Reveal>
           ))}
         </div>
-      </div>
+      </RevealGroup>
     </section>
   );
 }

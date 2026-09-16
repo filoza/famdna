@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 
 const LINKS = [
   { label: "About", href: "#about" },
@@ -12,6 +13,7 @@ const LINKS = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState<number | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -32,21 +34,32 @@ export default function Navbar() {
           <span className="text-cyan">N.A.</span>
         </a>
 
-        <div className="hidden items-center gap-8 md:flex">
-          {LINKS.map((link) => (
+        <div
+          className="hidden items-center gap-8 md:flex"
+          onMouseLeave={() => setHovered(null)}
+        >
+          {LINKS.map((link, i) => (
             <a
               key={link.href}
               href={link.href}
-              className="text-sm text-muted transition-colors hover:text-foreground"
+              onMouseEnter={() => setHovered(i)}
+              className="relative py-1 text-sm text-muted transition-colors hover:text-foreground"
             >
               {link.label}
+              {hovered === i && (
+                <motion.span
+                  layoutId="nav-underline"
+                  className="absolute right-0 -bottom-1 left-0 h-px bg-gradient-to-r from-orange to-cyan"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
             </a>
           ))}
         </div>
 
         <a
           href="#contact"
-          className="hidden rounded-full bg-foreground px-5 py-2 text-sm font-semibold text-background transition-transform hover:scale-105 md:inline-block"
+          className="hidden rounded-full border border-foreground/20 px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-orange hover:text-orange-soft md:inline-block"
         >
           Contact Us
         </a>
@@ -78,7 +91,7 @@ export default function Navbar() {
             <a
               href="#contact"
               onClick={() => setOpen(false)}
-              className="mt-2 inline-block rounded-full bg-foreground px-5 py-2 text-center text-sm font-semibold text-background"
+              className="mt-2 inline-block rounded-full border border-foreground/20 px-5 py-2 text-center text-sm font-semibold text-foreground"
             >
               Contact Us
             </a>

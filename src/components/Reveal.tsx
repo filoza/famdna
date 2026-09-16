@@ -3,29 +3,20 @@
 import { motion, type Variants } from "framer-motion";
 import type { ReactNode } from "react";
 
+const itemVariants: Variants = {
+  hidden: { y: 36 },
+  show: { y: 0, transition: { duration: 0.9, ease: [0.65, 0, 0.35, 1] } },
+};
+
 type RevealProps = {
   children: ReactNode;
-  delay?: number;
-  y?: number;
   className?: string;
 };
 
-export default function Reveal({ children, delay = 0, y = 28, className }: RevealProps) {
-  const variants: Variants = {
-    hidden: { opacity: 0, y },
-    show: { opacity: 1, y: 0 },
-  };
-
+export default function Reveal({ children, className }: RevealProps) {
   return (
-    <motion.div
-      className={className}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: "-80px" }}
-      variants={variants}
-      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
-    >
-      {children}
-    </motion.div>
+    <div className={`overflow-hidden ${className ?? ""}`}>
+      <motion.div variants={itemVariants}>{children}</motion.div>
+    </div>
   );
 }

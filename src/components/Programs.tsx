@@ -1,6 +1,7 @@
 "use client";
 
 import Reveal from "./Reveal";
+import RevealGroup from "./RevealGroup";
 
 const PROGRAMS = [
   {
@@ -32,40 +33,38 @@ const PROGRAMS = [
 export default function Programs() {
   return (
     <section id="programs" className="relative bg-background py-28">
-      <div className="mx-auto max-w-6xl px-6">
+      <RevealGroup className="mx-auto max-w-6xl px-6">
         <Reveal>
-          <p className="text-xs font-semibold tracking-widest text-cyan-soft uppercase">
-            What we offer
-          </p>
-          <h2 className="font-display mt-4 max-w-2xl text-4xl font-semibold sm:text-5xl">
-            Active learning, built for <span className="text-gradient">every family</span>
+          <p className="font-serif text-xl text-cyan-soft">what we offer</p>
+          <h2 className="font-display mt-4 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
+            Active learning, built for every family
           </h2>
         </Reveal>
 
-        <div className="mt-16 grid gap-6 sm:grid-cols-2">
+        <div className="mt-16 border-b border-border">
           {PROGRAMS.map((program, i) => (
-            <Reveal key={program.title} delay={i * 0.1}>
-              <div
-                className={`group h-full rounded-3xl border border-border bg-background-alt p-8 transition-colors ${
-                  program.accent === "orange" ? "hover:border-orange" : "hover:border-cyan"
-                }`}
-              >
-                <div
-                  className={`mb-6 flex h-12 w-12 items-center justify-center rounded-2xl text-lg font-semibold ${
+            <Reveal key={program.title}>
+              <div className="group grid grid-cols-[3rem_1fr] items-start gap-4 border-t border-border py-8 transition-colors sm:grid-cols-[5rem_1fr_1fr] sm:items-center sm:gap-8">
+                <span
+                  className={`font-display text-xl text-muted transition-colors ${
                     program.accent === "orange"
-                      ? "bg-orange/15 text-orange-soft"
-                      : "bg-cyan/15 text-cyan-soft"
+                      ? "group-hover:text-orange"
+                      : "group-hover:text-cyan"
                   }`}
                 >
-                  {program.title.charAt(0)}
-                </div>
-                <h3 className="font-display text-2xl font-semibold">{program.title}</h3>
-                <p className="mt-3 text-muted">{program.description}</p>
+                  0{i + 1}
+                </span>
+                <h3 className="font-display text-2xl font-medium transition-transform duration-300 group-hover:translate-x-2 sm:text-3xl">
+                  {program.title}
+                </h3>
+                <p className="col-span-2 mt-2 text-muted sm:col-span-1 sm:mt-0 sm:max-w-sm">
+                  {program.description}
+                </p>
               </div>
             </Reveal>
           ))}
         </div>
-      </div>
+      </RevealGroup>
     </section>
   );
 }

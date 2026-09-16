@@ -1,89 +1,108 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform, type Variants } from "framer-motion";
+import { useRef } from "react";
+import RevealWord from "./RevealWord";
+import Magnetic from "./Magnetic";
+import SweepButton from "./SweepButton";
+
+const container: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.14, delayChildren: 0.05 } },
+};
+
+const headline: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07 } },
+};
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
+};
 
 export default function Hero() {
+  const ref = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const blobOrangeY = useTransform(scrollYProgress, [0, 1], [0, 160]);
+  const blobCyanY = useTransform(scrollYProgress, [0, 1], [0, -120]);
+  const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
   return (
     <section
       id="top"
-      className="relative flex min-h-screen items-center overflow-hidden bg-background pt-24"
+      ref={ref}
+      className="bg-noise relative flex min-h-screen items-center overflow-hidden bg-background pt-24"
     >
       <div className="bg-grid absolute inset-0" />
-      <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-orange/25 blur-[120px]" />
-      <div className="pointer-events-none absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-cyan/25 blur-[120px]" />
+      <motion.div
+        style={{ y: blobOrangeY }}
+        className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-orange/20 blur-[120px]"
+      />
+      <motion.div
+        style={{ y: blobCyanY }}
+        className="pointer-events-none absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-cyan/20 blur-[120px]"
+      />
 
-      <div className="relative mx-auto flex max-w-6xl flex-col items-start px-6">
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="mb-6 rounded-full border border-border bg-background-alt px-4 py-1.5 text-xs font-semibold tracking-widest text-cyan-soft uppercase"
-        >
-          The New Youth Online Science Game Show
-        </motion.p>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="font-display max-w-4xl text-5xl leading-[1.05] font-semibold sm:text-6xl md:text-7xl"
-        >
-          Where <span className="text-gradient">Curiosity</span>
-          <br />
-          Meets <span className="text-gradient">Motion</span>.
-        </motion.h1>
-
-        <motion.p
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-6 max-w-xl text-lg text-muted"
-        >
-          D.N.A. is a STEAM-based educational brand that merges technology,
-          physical activity and creative learning — through our mobile app,
-          live events and interactive workshops, families build teamwork,
-          problem-solving and critical thinking skills.
-        </motion.p>
-
+      <motion.div style={{ opacity: fade }} className="relative mx-auto max-w-6xl px-6">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="mt-10 flex flex-wrap items-center gap-4"
+          initial="hidden"
+          animate="show"
+          variants={container}
+          className="flex flex-col items-start"
         >
-          <a
-            href="#programs"
-            className="glow-orange rounded-full bg-orange px-7 py-3 text-sm font-semibold text-background transition-transform hover:scale-105"
-          >
-            Explore Programs
-          </a>
-          <a
-            href="#watch"
-            className="rounded-full border border-border px-7 py-3 text-sm font-semibold text-foreground transition-colors hover:border-cyan hover:text-cyan-soft"
-          >
-            Watch the Trailer
-          </a>
-        </motion.div>
+          <motion.p variants={fadeUp} className="font-serif mb-6 text-xl text-cyan-soft">
+            the new youth online science game show
+          </motion.p>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
-          className="mt-20 grid w-full grid-cols-2 gap-8 border-t border-border pt-8 sm:grid-cols-4"
-        >
-          {[
-            ["500+", "Kids Engaged"],
-            ["40+", "Live Events"],
-            ["12", "STEAM Modules"],
-            ["3", "City Partnerships"],
-          ].map(([stat, label]) => (
-            <div key={label}>
-              <p className="font-display text-3xl font-semibold text-foreground">{stat}</p>
-              <p className="mt-1 text-xs text-muted uppercase tracking-wide">{label}</p>
-            </div>
-          ))}
+          <motion.h1
+            variants={headline}
+            className="font-display max-w-4xl text-5xl leading-[1.02] font-semibold tracking-tight sm:text-6xl md:text-7xl"
+          >
+            <RevealWord>Where</RevealWord> <RevealWord className="text-gradient-shimmer">Curiosity</RevealWord>
+            <br />
+            <RevealWord>Meets</RevealWord> <RevealWord className="text-gradient-shimmer">Motion</RevealWord>
+            <RevealWord>.</RevealWord>
+          </motion.h1>
+
+          <motion.p variants={fadeUp} className="mt-6 max-w-xl text-lg text-muted">
+            D.N.A. is a STEAM-based educational brand that merges technology,
+            physical activity and creative learning — through our mobile app,
+            live events and interactive workshops, families build teamwork,
+            problem-solving and critical thinking skills.
+          </motion.p>
+
+          <motion.div variants={fadeUp} className="mt-10 flex flex-wrap items-center gap-4">
+            <Magnetic>
+              <SweepButton href="#programs" accent="orange">
+                Explore Programs
+              </SweepButton>
+            </Magnetic>
+            <Magnetic>
+              <SweepButton href="#watch" accent="cyan">
+                Watch the Trailer
+              </SweepButton>
+            </Magnetic>
+          </motion.div>
+
+          <motion.div
+            variants={fadeUp}
+            className="mt-20 flex w-full flex-wrap gap-x-10 gap-y-6 border-t border-border pt-8"
+          >
+            {[
+              ["500+", "Kids Engaged"],
+              ["40+", "Live Events"],
+              ["12", "STEAM Modules"],
+              ["3", "City Partnerships"],
+            ].map(([stat, label], i) => (
+              <div key={label} className={i > 0 ? "border-l border-border pl-10" : ""}>
+                <p className="font-display text-3xl font-semibold text-foreground">{stat}</p>
+                <p className="font-serif mt-1 text-base text-muted">{label}</p>
+              </div>
+            ))}
+          </motion.div>
         </motion.div>
-      </div>
+      </motion.div>
     </section>
   );
 }
