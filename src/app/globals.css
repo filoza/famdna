@@ -125,6 +125,8 @@ body {
   background-repeat: repeat;
   background-size: 120px 120px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpath d='M30,0 C30,10 48,20 48,30 C48,40 30,50 30,60 C30,70 12,80 12,90 C12,100 30,110 30,120' fill='none' stroke='%23ff7a50' stroke-width='2.5'/%3E%3Cpath d='M30,0 C30,10 12,20 12,30 C12,40 30,50 30,60 C30,70 48,80 48,90 C48,100 30,110 30,120' fill='none' stroke='%233ecf8e' stroke-width='2.5'/%3E%3Cg stroke='%234fa3d9' stroke-width='1.5' opacity='0.5'%3E%3Cline x1='22' y1='15' x2='38' y2='15'/%3E%3Cline x1='12' y1='30' x2='48' y2='30'/%3E%3Cline x1='22' y1='45' x2='38' y2='45'/%3E%3Cline x1='22' y1='75' x2='38' y2='75'/%3E%3Cline x1='12' y1='90' x2='48' y2='90'/%3E%3Cline x1='22' y1='105' x2='38' y2='105'/%3E%3C/g%3E%3Cpath d='M90,0 C90,10 108,20 108,30 C108,40 90,50 90,60 C90,70 72,80 72,90 C72,100 90,110 90,120' fill='none' stroke='%23ff7a50' stroke-width='2.5'/%3E%3Cpath d='M90,0 C90,10 72,20 72,30 C72,40 90,50 90,60 C90,70 108,80 108,90 C108,100 90,110 90,120' fill='none' stroke='%233ecf8e' stroke-width='2.5'/%3E%3Cg stroke='%234fa3d9' stroke-width='1.5' opacity='0.5'%3E%3Cline x1='82' y1='15' x2='98' y2='15'/%3E%3Cline x1='72' y1='30' x2='108' y2='30'/%3E%3Cline x1='82' y1='45' x2='98' y2='45'/%3E%3Cline x1='82' y1='75' x2='98' y2='75'/%3E%3Cline x1='72' y1='90' x2='108' y2='90'/%3E%3Cline x1='82' y1='105' x2='98' y2='105'/%3E%3C/g%3E%3C/svg%3E");
+  transform: rotate(-14deg) scale(1.4);
+  transform-origin: center center;
   animation: dna-grid-drift 12s linear infinite;
   animation-play-state: paused;
 }
