@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useScroll, useTransform, type Variants } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import RevealWord from "./RevealWord";
 import Magnetic from "./Magnetic";
 import SweepButton from "./SweepButton";
@@ -27,14 +27,15 @@ export default function Hero() {
   const blobOrangeY = useTransform(scrollYProgress, [0, 1], [0, 160]);
   const blobCyanY = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+  const [entranceDone, setEntranceDone] = useState(false);
 
   return (
     <section
       id="top"
       ref={ref}
-      className="bg-noise relative flex min-h-screen items-center overflow-hidden bg-background pt-24"
+      className="bg-noise relative isolate flex min-h-screen items-center overflow-hidden bg-background pt-24"
     >
-      <div className="bg-grid absolute inset-0" />
+      <div className={`dna-grid-bg${entranceDone ? " is-playing" : ""}`} />
       <motion.div
         style={{ y: blobOrangeY }}
         className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-orange/20 blur-[120px]"
@@ -44,7 +45,7 @@ export default function Hero() {
         className="pointer-events-none absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-cyan/20 blur-[120px]"
       />
 
-      <motion.div style={{ opacity: fade }} className="relative mx-auto max-w-6xl px-6">
+      <motion.div style={{ opacity: fade }} className="relative z-10 mx-auto max-w-6xl px-6">
         <motion.div
           initial="hidden"
           animate="show"
@@ -87,6 +88,7 @@ export default function Hero() {
 
           <motion.div
             variants={fadeUp}
+            onAnimationComplete={() => setEntranceDone(true)}
             className="mt-20 flex w-full flex-wrap gap-x-10 gap-y-6 border-t border-border pt-8"
           >
             {[
