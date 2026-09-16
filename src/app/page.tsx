@@ -7,6 +7,7 @@ import VideoShowcase from "@/components/VideoShowcase";
 import Impact from "@/components/Impact";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
+import FloatingEmblem from "@/components/FloatingEmblem";
 
 const TICKER_ITEMS = [
   "STEAM Learning",
@@ -30,6 +31,7 @@ export default function Home() {
         <CTA />
       </main>
       <Footer />
+      <FloatingEmblem />
     </>
   );
 }
