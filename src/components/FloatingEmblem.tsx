@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 
-// TODO: replace with the real business phone number.
-const PHONE_DISPLAY = "(000) 000-0000";
-const PHONE_HREF = "tel:+10000000000";
+const PHONE_DISPLAY = "555-0142";
+const PHONE_HREF = "tel:5550142";
 const EMAIL = "hello@famdna.com";
 
 export default function FloatingEmblem() {
