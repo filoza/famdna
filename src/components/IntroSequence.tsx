@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 const BASE_SIZE = 160; // px — matches h-40/w-40 on the dock group, unscaled
+const BRAND_ORANGE = "#ff9d2e";
+const BRAND_CYAN = "#2fe6d1";
 
 export default function IntroSequence() {
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -14,12 +16,14 @@ export default function IntroSequence() {
   const orbRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
     if (prefersReducedMotion) {
+      // Skip straight to the Stage 4 end state: no intro overlay, just the
+      // static navbar logo (already rendered by Navbar) sitting in place.
       gsap.set(sectionRef.current, { display: "none" });
       return;
     }
@@ -55,7 +59,7 @@ export default function IntroSequence() {
         scrollTrigger: {
           trigger: sectionRef.current,
           start: "top top",
-          end: "+=120%",
+          end: "+=100%",
           pin: true,
           scrub: 1,
           anticipatePin: 1,
@@ -104,8 +108,12 @@ export default function IntroSequence() {
   }, []);
 
   return (
-    <div ref={sectionRef} className="pointer-events-none relative h-screen w-full">
-      <div ref={backdropRef} className="absolute inset-0 z-[100] bg-background" />
+    <div ref={sectionRef} className="pointer-events-none relative z-[200] h-screen w-full">
+      <div
+        ref={backdropRef}
+        className="absolute inset-0 z-[100]"
+        style={{ background: "#060608" }}
+      />
 
       <div
         ref={dockGroupRef}
@@ -115,7 +123,7 @@ export default function IntroSequence() {
           ref={ringRef}
           className="absolute top-1/2 left-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{
-            background: "conic-gradient(from 0deg, #e8703f, #2f9e8f, #e8703f)",
+            background: `conic-gradient(from 0deg, ${BRAND_ORANGE}, ${BRAND_CYAN}, ${BRAND_ORANGE})`,
             WebkitMaskImage:
               "radial-gradient(closest-side, transparent 62%, black 64%, black 100%)",
             maskImage:
@@ -127,8 +135,8 @@ export default function IntroSequence() {
           ref={orbRef}
           className="absolute top-1/2 left-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{
-            background: "radial-gradient(circle, #fff 0%, #e8703f 45%, #2f9e8f 100%)",
-            boxShadow: "0 0 40px 10px rgba(47,158,143,0.45)",
+            background: `radial-gradient(circle, #fff 0%, ${BRAND_ORANGE} 45%, ${BRAND_CYAN} 100%)`,
+            boxShadow: "0 0 40px 10px rgba(47,230,209,0.45)",
           }}
         />
         <video

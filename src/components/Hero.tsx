@@ -1,10 +1,13 @@
 "use client";
 
 import { motion, useScroll, useTransform, type Variants } from "framer-motion";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import RevealWord from "./RevealWord";
 import Magnetic from "./Magnetic";
 import SweepButton from "./SweepButton";
+import DnaHelix from "./DnaHelix";
 
 const container: Variants = {
   hidden: {},
@@ -17,38 +20,89 @@ const headline: Variants = {
 };
 
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
 };
 
 export default function Hero() {
   const ref = useRef<HTMLElement>(null);
+  const helixRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "0.5 start"] });
   const blobOrangeY = useTransform(scrollYProgress, [0, 1], [0, 160]);
   const blobCyanY = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
-  const [entranceDone, setEntranceDone] = useState(false);
+
+  // Second ScrollTrigger: the helix background is absent until the viewer
+  // has scrolled past the Stage 0-4 intro sequence and into the hero itself.
+  useLayoutEffect(() => {
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    if (prefersReducedMotion) {
+      gsap.set(helixRef.current, { opacity: 1 });
+      return;
+    }
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        helixRef.current,
+        { opacity: 0 },
+        {
+          opacity: 1,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ref.current,
+            // Starts exactly where the intro sequence unpins (hero's top
+            // meeting the viewport top) and plays out over the following
+            // scroll distance — never during the pin itself.
+            start: "top top",
+            end: "+=280",
+            scrub: 1,
+          },
+        }
+      );
+    }, ref);
+
+    return () => ctx.revert();
+  }, []);
 
   return (
     <section
       id="top"
       ref={ref}
-      className="bg-noise relative isolate flex min-h-screen items-center overflow-hidden bg-background pt-24"
+      className="bg-noise relative flex min-h-screen items-center overflow-hidden bg-background pt-24"
     >
-      <div className={`dna-grid-bg${entranceDone ? " is-playing" : ""}`} />
+      <div ref={helixRef} className="pointer-events-none absolute inset-y-0 right-0 z-0 w-full md:w-[46%]" style={{ opacity: 0 }}>
+        <DnaHelix className="h-full w-full" />
+      </div>
+
       <motion.div
         style={{ y: blobOrangeY }}
-        className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-orange/20 blur-[120px]"
+        className="pointer-events-none absolute -top-40 -left-40 z-0 h-96 w-96 rounded-full bg-orange/20 blur-[120px]"
       />
       <motion.div
         style={{ y: blobCyanY }}
-        className="pointer-events-none absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-cyan/20 blur-[120px]"
+        className="pointer-events-none absolute top-1/3 -right-32 z-0 h-96 w-96 rounded-full bg-cyan/20 blur-[120px]"
+      />
+
+      {/* Scrim: keeps headline/body/buttons at strong contrast regardless of
+          what the helix or glows are doing behind them. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[5]"
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 60% at 30% 45%, rgba(6,6,8,0.7) 0%, rgba(6,6,8,0.4) 45%, rgba(6,6,8,0) 75%)",
+        }}
       />
 
       <motion.div style={{ opacity: fade }} className="relative z-10 mx-auto max-w-6xl px-6">
         <motion.div
           initial="hidden"
-          animate="show"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
           variants={container}
           className="flex flex-col items-start"
         >
@@ -88,7 +142,6 @@ export default function Hero() {
 
           <motion.div
             variants={fadeUp}
-            onAnimationComplete={() => setEntranceDone(true)}
             className="mt-20 flex w-full flex-wrap gap-x-10 gap-y-6 border-t border-border pt-8"
           >
             {[
