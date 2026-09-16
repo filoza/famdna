@@ -17,17 +17,6 @@ export default function IntroSequence() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useLayoutEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (prefersReducedMotion) {
-      // Skip straight to the Stage 4 end state: no intro overlay, just the
-      // static navbar logo (already rendered by Navbar) sitting in place.
-      gsap.set(sectionRef.current, { display: "none" });
-      return;
-    }
-
     gsap.registerPlugin(ScrollTrigger);
 
     const ctx = gsap.context(() => {
