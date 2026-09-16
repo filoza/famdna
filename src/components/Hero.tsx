@@ -23,7 +23,7 @@ const fadeUp: Variants = {
 
 export default function Hero() {
   const ref = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "0.5 start"] });
   const blobOrangeY = useTransform(scrollYProgress, [0, 1], [0, 160]);
   const blobCyanY = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
