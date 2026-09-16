@@ -48,7 +48,7 @@ export default function IntroSequence() {
         scrollTrigger: {
           trigger: sectionRef.current,
           start: "top top",
-          end: "+=100%",
+          end: "+=200%",
           pin: true,
           scrub: 1,
           anticipatePin: 1,
@@ -73,7 +73,7 @@ export default function IntroSequence() {
           [],
           0.48
         )
-        .to(group, { scale: 3.4, duration: 0.24 }, 0.48)
+        .to(group, { scale: 2.4, duration: 0.24 }, 0.48)
         .fromTo(video, { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.48)
 
         // Stage 3 — dock: travel + shrink into the navbar logo slot, then
@@ -114,9 +114,9 @@ export default function IntroSequence() {
           style={{
             background: `conic-gradient(from 0deg, ${BRAND_ORANGE}, ${BRAND_CYAN}, ${BRAND_ORANGE})`,
             WebkitMaskImage:
-              "radial-gradient(closest-side, transparent 62%, black 64%, black 100%)",
+              "radial-gradient(closest-side, transparent 78%, black 80%, black 100%)",
             maskImage:
-              "radial-gradient(closest-side, transparent 62%, black 64%, black 100%)",
+              "radial-gradient(closest-side, transparent 78%, black 80%, black 100%)",
             opacity: 0,
           }}
         />
@@ -125,12 +125,13 @@ export default function IntroSequence() {
           className="absolute top-1/2 left-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{
             background: `radial-gradient(circle, #fff 0%, ${BRAND_ORANGE} 45%, ${BRAND_CYAN} 100%)`,
-            boxShadow: "0 0 40px 10px rgba(47,230,209,0.45)",
+            boxShadow: "0 0 16px 2px rgba(47,230,209,0.35)",
           }}
         />
         <video
           ref={videoRef}
           muted
+          loop
           playsInline
           preload="auto"
           poster="/dna-hero-poster.jpg"
