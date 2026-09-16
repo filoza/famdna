@@ -27,8 +27,6 @@ export default function Hero() {
   const blobOrangeY = useTransform(scrollYProgress, [0, 1], [0, 160]);
   const blobCyanY = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
-  const videoScale = useTransform(scrollYProgress, [0, 1], [1, 1.12]);
-  const videoOpacity = useTransform(scrollYProgress, [0.35, 0.85], [1, 0]);
 
   return (
     <section
@@ -36,31 +34,17 @@ export default function Hero() {
       ref={ref}
       className="bg-noise relative flex min-h-screen items-center overflow-hidden bg-background pt-24"
     >
-      {/* DNA hero video — plays on load, then fades/scales away on scroll
-         to reveal the plain grid background beneath it. */}
-      <motion.video
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        poster="/dna-hero-poster.jpg"
-        src="/dna-hero.mp4"
-        style={{ scale: videoScale, opacity: videoOpacity }}
-        className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover"
-      />
-      <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-b from-background/60 via-background/25 to-background" />
-      <div className="bg-grid absolute inset-0 z-10" />
+      <div className="bg-grid absolute inset-0" />
       <motion.div
         style={{ y: blobOrangeY }}
-        className="pointer-events-none absolute -top-40 -left-40 z-10 h-96 w-96 rounded-full bg-orange/20 blur-[120px]"
+        className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-orange/20 blur-[120px]"
       />
       <motion.div
         style={{ y: blobCyanY }}
-        className="pointer-events-none absolute top-1/3 -right-32 z-10 h-96 w-96 rounded-full bg-cyan/20 blur-[120px]"
+        className="pointer-events-none absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-cyan/20 blur-[120px]"
       />
 
-      <motion.div style={{ opacity: fade }} className="relative z-20 mx-auto max-w-6xl px-6">
+      <motion.div style={{ opacity: fade }} className="relative mx-auto max-w-6xl px-6">
         <motion.div
           initial="hidden"
           animate="show"

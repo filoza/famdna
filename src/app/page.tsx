@@ -1,4 +1,5 @@
 import Navbar from "@/components/Navbar";
+import IntroSequence from "@/components/IntroSequence";
 import Hero from "@/components/Hero";
 import Marquee from "@/components/Marquee";
 import About from "@/components/About";
@@ -21,6 +22,7 @@ export default function Home() {
   return (
     <>
       <Navbar />
+      <IntroSequence />
       <main className="flex-1">
         <Hero />
         <Marquee items={TICKER_ITEMS} />

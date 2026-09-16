@@ -29,7 +29,7 @@ export default function Navbar() {
       }`}
     >
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="#top" className="font-display text-2xl font-semibold tracking-tight">
+        <a id="nav-logo" href="#top" className="font-display text-2xl font-semibold tracking-tight">
           <span className="text-orange">D.</span>
           <span className="text-cyan">N.A.</span>
         </a>
