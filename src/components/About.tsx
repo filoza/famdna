@@ -5,7 +5,7 @@ import RevealGroup from "./RevealGroup";
 
 export default function About() {
   return (
-    <section id="about" className="relative bg-background-alt py-28">
+    <section id="about" className="relative py-28">
       <RevealGroup className="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-2 md:items-center">
         <Reveal>
           <p className="font-serif text-xl text-orange-soft">our mission</p>

@@ -18,7 +18,7 @@ export default function Impact() {
   const inView = useInView(rowRef, { once: true, amount: 0.2 });
 
   return (
-    <section id="impact" className="relative bg-background py-28">
+    <section id="impact" className="relative py-28">
       <RevealGroup className="mx-auto max-w-6xl px-6">
         <Reveal>
           <p className="font-serif text-xl text-orange-soft">our impact</p>

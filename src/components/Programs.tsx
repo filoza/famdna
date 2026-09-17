@@ -32,7 +32,7 @@ const PROGRAMS = [
 
 export default function Programs() {
   return (
-    <section id="programs" className="relative bg-background py-28">
+    <section id="programs" className="relative py-28">
       <RevealGroup className="mx-auto max-w-6xl px-6">
         <Reveal>
           <p className="font-serif text-xl text-cyan-soft">what we offer</p>

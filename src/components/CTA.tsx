@@ -7,7 +7,7 @@ import SweepButton from "./SweepButton";
 
 export default function CTA() {
   return (
-    <section id="contact" className="bg-noise relative overflow-hidden bg-background py-28">
+    <section id="contact" className="bg-noise relative overflow-hidden py-28">
       <div className="pointer-events-none absolute top-1/2 left-1/2 h-72 w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-orange/15 to-cyan/15 blur-[100px]" />
 
       <RevealGroup className="relative mx-auto max-w-3xl px-6 text-center">

@@ -9,7 +9,7 @@ export default function VideoShowcase() {
   const [playing, setPlaying] = useState(false);
 
   return (
-    <section id="watch" className="relative bg-background-alt py-28">
+    <section id="watch" className="relative py-28">
       <RevealGroup className="mx-auto max-w-5xl px-6 text-center">
         <Reveal>
           <p className="font-serif text-xl text-orange-soft">see it in motion</p>

@@ -2,28 +2,55 @@
 
 import { useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { Flip } from "gsap/Flip";
 
-const BASE_SIZE = 160; // px — matches h-40/w-40 on the dock group, unscaled
 const BRAND_ORANGE = "#ff9d2e";
 const BRAND_CYAN = "#2fe6d1";
 const PARTICLE_COUNT = 28;
+
+function wavyCirclePath(radius: number, waves: number, amplitude: number, phase: number) {
+  const points = 64;
+  const c = 80; // center, matches the 0 0 160 160 viewBox
+  let d = "";
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * Math.PI * 2;
+    const r = radius + amplitude * Math.sin(waves * angle + phase);
+    const x = c + r * Math.cos(angle);
+    const y = c + r * Math.sin(angle);
+    d += i === 0 ? `M${x},${y}` : ` L${x},${y}`;
+  }
+  return d + " Z";
+}
 
 export default function IntroSequence() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dockGroupRef = useRef<HTMLDivElement>(null);
-  const ringRef = useRef<HTMLDivElement>(null);
+  const waveGroupRef = useRef<SVGSVGElement>(null);
+  const wavePathRef = useRef<SVGPathElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const particlesWrapRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const html = document.documentElement;
-    const prevOverflow = html.style.overflow;
-    // Lock scroll for the intro's own fixed duration — regardless of how
-    // fast or slow the user scrolls, they get the full sequence before
-    // scrolling is handed back.
-    html.style.overflow = "hidden";
+    // The wave path's `d` is set here (client-only, post-mount) rather than
+    // computed inline in JSX, so the server-rendered markup never has to
+    // match a computed floating-point string against the client's.
+    wavePathRef.current?.setAttribute("d", wavyCirclePath(60, 8, 4, 0));
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    if (prefersReducedMotion) {
+      // Skip straight to the Stage 4 end state: no intro overlay, just the
+      // static navbar logo (already rendered by Navbar) sitting in place.
+      gsap.set(sectionRef.current, { display: "none" });
+      return;
+    }
+
+    gsap.registerPlugin(ScrollTrigger, Flip);
 
     const ctx = gsap.context(() => {
       const group = dockGroupRef.current;
@@ -33,42 +60,76 @@ export default function IntroSequence() {
         : [];
       if (!group || !video) return;
 
-      const getDockTarget = () => {
-        const navLogo = document.getElementById("nav-logo");
-        if (!navLogo) return { dx: 0, dy: 0, scale: 0.2 };
-        const groupRect = group.getBoundingClientRect();
-        const navRect = navLogo.getBoundingClientRect();
-        const centerX = groupRect.left + groupRect.width / 2;
-        const centerY = groupRect.top + groupRect.height / 2;
-        const dx = navRect.left + navRect.width / 2 - centerX;
-        const dy = navRect.top + navRect.height / 2 - centerY;
-        const scale = Math.max(navRect.height / BASE_SIZE, 0.05);
-        return { dx, dy, scale };
-      };
+      let videoStarted = false;
 
-      video.currentTime = 0;
-      video.play().catch(() => {});
+      // Continuous wave undulation on the ring's outline — runs forever,
+      // independent of and in addition to the rotate/scale below.
+      const waveTween = gsap.to(wavePathRef.current, {
+        attr: { d: wavyCirclePath(60, 8, 10, Math.PI) },
+        duration: 1.3,
+        repeat: -1,
+        yoyo: true,
+        ease: "sine.inOut",
+      });
+
+      // Flip-powered dock: capture the group's current (centered) state,
+      // jump it — invisibly, Flip immediately compensates — to sit exactly
+      // over the navbar logo, then let Flip.from() animate that transition.
+      // Built once, added into the scrubbed master timeline like any tween.
+      const navLogo = document.getElementById("nav-logo");
+      let dockTween: gsap.core.Timeline | null = null;
+      if (navLogo) {
+        const flipState = Flip.getState(group);
+        const navRect = navLogo.getBoundingClientRect();
+        gsap.set(group, {
+          position: "fixed",
+          top: navRect.top,
+          left: navRect.left,
+          width: navRect.width,
+          height: navRect.height,
+          xPercent: 0,
+          yPercent: 0,
+        });
+        dockTween = Flip.from(flipState, {
+          duration: 0.22,
+          ease: "power2.inOut",
+          absolute: true,
+          scale: true,
+        });
+      }
 
       const tl = gsap.timeline({
         defaults: { ease: "none" },
-        onComplete: () => {
-          html.style.overflow = prevOverflow;
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top top",
+          end: "+=180%",
+          pin: true,
+          scrub: 1,
+          anticipatePin: 1,
         },
       });
 
-      // Stage 1 — swirl: small centered orb + ring, spinning/scaling up.
-      tl.to(ringRef.current, { opacity: 1, rotate: 900, scale: 5.5, duration: 0.9, ease: "power1.inOut" }, 0)
-        .to(orbRef.current, { scale: 6, duration: 0.9, ease: "power1.inOut" }, 0)
-        .to([ringRef.current, orbRef.current], { opacity: 0, duration: 0.25 }, 0.85)
+      // Stage 1 — swirl: wave ring + orb spin/scale up together.
+      tl.to(waveGroupRef.current, { opacity: 1, rotate: 900, scale: 5.5, duration: 0.4 }, 0)
+        .to(orbRef.current, { scale: 6 }, 0)
+        .to([waveGroupRef.current, orbRef.current], { opacity: 0, duration: 0.12 }, 0.5)
 
-        // Stage 2 — explode: the burst video fills the whole screen, with
-        // sparkle-dust particles scattering out across the full viewport.
-        .fromTo(
-          video,
-          { opacity: 0, scale: 0.25 },
-          { opacity: 1, scale: 1, duration: 0.7, ease: "power2.out" },
-          0.8
+        // Stage 2 — landing: the burst video fills the whole screen, with
+        // sparkle-dust particles scattering across the full viewport while
+        // the backdrop is still fully opaque behind them.
+        .call(
+          () => {
+            if (!videoStarted) {
+              videoStarted = true;
+              video.currentTime = 0;
+              video.play().catch(() => {});
+            }
+          },
+          [],
+          0.48
         )
+        .fromTo(video, { opacity: 0, scale: 0.25 }, { opacity: 1, scale: 1, duration: 0.22 }, 0.48)
         .fromTo(
           particles,
           { opacity: 0, scale: 0, x: 0, y: 0 },
@@ -77,43 +138,36 @@ export default function IntroSequence() {
             scale: 1,
             x: () => gsap.utils.random(-window.innerWidth * 0.46, window.innerWidth * 0.46),
             y: () => gsap.utils.random(-window.innerHeight * 0.46, window.innerHeight * 0.46),
-            duration: 0.9,
-            stagger: 0.012,
+            duration: 0.24,
+            stagger: 0.003,
             ease: "power2.out",
           },
-          0.85
+          0.5
         )
-        .to(particles, { opacity: 0, duration: 0.5 }, 1.5)
+        .to(particles, { opacity: 0, duration: 0.12 }, 0.68)
 
         // Stage 3 — dock: video fades, the small orb reappears and travels
         // into the exact navbar logo slot, then crossfades into it.
-        .to(video, { opacity: 0, duration: 0.4 }, 1.6)
-        .set(orbRef.current, { opacity: 1, scale: 1 }, 1.7)
-        .to(
-          group,
-          {
-            x: () => getDockTarget().dx,
-            y: () => getDockTarget().dy,
-            scale: () => getDockTarget().scale,
-            duration: 0.5,
-            ease: "power2.inOut",
-          },
-          1.75
-        )
-        .to(orbRef.current, { opacity: 0, duration: 0.2 }, 2.15)
-        .to(backdropRef.current, { opacity: 0, duration: 0.3 }, 2.0);
+        .to(video, { opacity: 0, duration: 0.1 }, 0.72)
+        .set(orbRef.current, { opacity: 1, scale: 1 }, 0.74);
+
+      if (dockTween) tl.add(dockTween, 0.75);
+
+      tl.to(orbRef.current, { opacity: 0, duration: 0.08 }, 0.95)
+        .to(backdropRef.current, { opacity: 0, duration: 0.1 }, 0.9);
+
+      return () => {
+        waveTween.kill();
+      };
     }, sectionRef);
 
-    return () => {
-      html.style.overflow = prevOverflow;
-      ctx.revert();
-    };
+    return () => ctx.revert();
   }, []);
 
   const particles = Array.from({ length: PARTICLE_COUNT });
 
   return (
-    <div ref={sectionRef} className="pointer-events-none fixed inset-0 z-[200]">
+    <div ref={sectionRef} className="pointer-events-none relative z-[200] h-screen w-full">
       <div ref={backdropRef} className="absolute inset-0" style={{ background: "#060608" }} />
 
       <video
@@ -144,18 +198,26 @@ export default function IntroSequence() {
         ref={dockGroupRef}
         className="absolute top-1/2 left-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2"
       >
-        <div
-          ref={ringRef}
-          className="absolute top-1/2 left-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{
-            background: `conic-gradient(from 0deg, ${BRAND_ORANGE}, ${BRAND_CYAN}, ${BRAND_ORANGE})`,
-            WebkitMaskImage:
-              "radial-gradient(closest-side, transparent 78%, black 80%, black 100%)",
-            maskImage:
-              "radial-gradient(closest-side, transparent 78%, black 80%, black 100%)",
-            opacity: 0,
-          }}
-        />
+        <svg
+          ref={waveGroupRef}
+          viewBox="0 0 160 160"
+          className="absolute top-1/2 left-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2"
+          style={{ opacity: 0 }}
+        >
+          <defs>
+            <linearGradient id="intro-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={BRAND_ORANGE} />
+              <stop offset="100%" stopColor={BRAND_CYAN} />
+            </linearGradient>
+          </defs>
+          <path
+            ref={wavePathRef}
+            fill="none"
+            stroke="url(#intro-ring-gradient)"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+        </svg>
         <div
           ref={orbRef}
           className="absolute top-1/2 left-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
