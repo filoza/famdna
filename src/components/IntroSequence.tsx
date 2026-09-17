@@ -9,16 +9,28 @@ import { introState } from "@/lib/introState";
 const BRAND_ORANGE = "#ff9d2e";
 const BRAND_CYAN = "#2fe6d1";
 
-// This component owns only the DOM "seed point" and the GSAP ScrollTrigger
-// that paces the intro — the particle column/burst itself is rendered by
-// ParticleField (WebGL), driven by the shared introState this writes to.
+const STATS_LEFT = [
+  { value: "500+", label: "Kids Engaged" },
+  { value: "40+", label: "Live Events" },
+];
+const STATS_RIGHT = [
+  { value: "12", label: "STEAM Modules" },
+  { value: "3", label: "City Partnerships" },
+];
+
+// This component owns the DOM "seed point", the floating stat cards, and
+// the GSAP ScrollTrigger that paces the intro — the particle grid itself
+// is rendered by ParticleField (WebGL), driven by the shared introState
+// this writes to.
 //
 // Timeline positions below are literal 0–1 fractions of the pin's own
-// scroll range, matching spec 1:1: Stage 1 growth 0–40%, Stage 2 landing
-// hold 40–60%, Stage 3 dock 60–90%, Stage 4 tail 90–100%.
+// scroll range: formation 0–55% (ParticleField reads introState.progress
+// directly), landing hold 55–65%, dock 65–90%, tail 90–100%.
 export default function IntroSequence() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
+  const cardLeftRef = useRef<HTMLDivElement>(null);
+  const cardRightRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const prefersReducedMotion = window.matchMedia(
@@ -28,8 +40,7 @@ export default function IntroSequence() {
     if (prefersReducedMotion) {
       // Skip straight to the Stage 4 end state: logo already docked, no
       // intro overlay. ParticleField treats reduced-motion the same as a
-      // low-end device (plain fallback background, no WebGL at all), so
-      // introState's values here don't matter beyond staying consistent.
+      // low-end device (plain fallback background, no WebGL at all).
       introState.progress = 1;
       introState.dockFade = 0;
       introState.done = true;
@@ -61,7 +72,7 @@ export default function IntroSequence() {
           yPercent: 0,
         });
         dockTween = Flip.from(flipState, {
-          duration: 0.22,
+          duration: 0.2,
           ease: "power2.inOut",
           absolute: true,
           scale: true,
@@ -73,7 +84,7 @@ export default function IntroSequence() {
         scrollTrigger: {
           trigger: sectionRef.current,
           start: "top top",
-          end: "+=150%",
+          end: "+=160%",
           pin: true,
           scrub: 1,
           anticipatePin: 1,
@@ -92,18 +103,23 @@ export default function IntroSequence() {
         },
       });
 
-      // Stages 1-2 (0-60%): growth + landing hold, entirely driven by
-      // ParticleField reading introState.progress — this placeholder just
-      // occupies that portion of the scrubbed timeline.
-      tl.to({}, { duration: 0.6 });
+      // Stat cards fade in as the double-helix resolves (end of Stage 1C)
+      // and through the Stage 2 landing hold, then fade out before dock.
+      tl.fromTo(
+        [cardLeftRef.current, cardRightRef.current],
+        { opacity: 0, y: 16 },
+        { opacity: 1, y: 0, duration: 0.06, stagger: 0.02 },
+        0.48
+      );
+      tl.to([cardLeftRef.current, cardRightRef.current], { opacity: 0, duration: 0.05 }, 0.63);
 
-      // Stage 3 (60-90%) — dock: the WebGL grid collapses back to the seed
-      // point FIRST (fast, finishes well before the Flip starts), so only
-      // the small orb is left to visibly travel — one coherent object
+      // Stage 3 (65-90%) — dock: the WebGL grid collapses back to the seed
+      // point FIRST (fast, finishes before the Flip starts), so only the
+      // small orb is left to visibly travel — one coherent object
       // shrinking then moving, not two things happening at once.
-      tl.to(introState, { dockFade: 0, duration: 0.15, ease: "power2.in" }, 0.6);
-      if (dockTween) tl.add(dockTween, 0.72);
-      tl.to(orb, { opacity: 0, duration: 0.08 }, 0.86);
+      tl.to(introState, { dockFade: 0, duration: 0.13, ease: "power2.in" }, 0.65);
+      if (dockTween) tl.add(dockTween, 0.76);
+      tl.to(orb, { opacity: 0, duration: 0.06 }, 0.88);
 
       // Pad to exactly 100% so the stage percentages above map 1:1 to the
       // scrollTrigger's own progress.
@@ -123,6 +139,30 @@ export default function IntroSequence() {
           boxShadow: "0 0 16px 2px rgba(47,230,209,0.35)",
         }}
       />
+
+      <div
+        ref={cardLeftRef}
+        className="absolute top-1/2 left-[8%] w-52 -translate-y-1/2 rounded-2xl border border-border bg-background-alt/60 p-5 opacity-0 backdrop-blur-md"
+      >
+        {STATS_LEFT.map((stat, i) => (
+          <div key={stat.label} className={i > 0 ? "mt-3 border-t border-border pt-3" : ""}>
+            <p className="font-display text-2xl font-semibold text-orange-soft">{stat.value}</p>
+            <p className="font-serif text-sm text-muted">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div
+        ref={cardRightRef}
+        className="absolute top-1/2 right-[8%] w-52 -translate-y-1/2 rounded-2xl border border-border bg-background-alt/60 p-5 opacity-0 backdrop-blur-md"
+      >
+        {STATS_RIGHT.map((stat, i) => (
+          <div key={stat.label} className={i > 0 ? "mt-3 border-t border-border pt-3" : ""}>
+            <p className="font-display text-2xl font-semibold text-cyan-soft">{stat.value}</p>
+            <p className="font-serif text-sm text-muted">{stat.label}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

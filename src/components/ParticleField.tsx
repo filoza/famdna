@@ -5,32 +5,29 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { EffectComposer, Selection, Select, SelectiveBloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { simplexNoise3D } from "@/lib/noiseGLSL";
-import { scrollProgress } from "@/lib/scrollProgress";
 import { introState } from "@/lib/introState";
 import { isLowEndDevice } from "@/lib/deviceCapability";
 
-// A UV grid mapped onto a curved surface — U runs along the shape's length,
-// V runs across each strand's own width. Each fixed-V row, sampled densely
-// along U, reads as one continuous wavy strand; the full grid together
-// reads as a woven mesh, not a scattered cloud and not a solid tube.
-const STRAND_COUNT = 2; // two genuinely separate strands, not one tube
+// A UV grid mapped onto a double-helix surface — U runs along its length,
+// V runs across each strand's own width. One fixed geometry throughout;
+// "sparse cloud" vs "condensing column" vs "resolved helix" vs "wide flow
+// further down the page" are all the SAME grid at different `spread`
+// values, not different techniques or a position-morph between shapes.
+const STRAND_COUNT = 2;
 const U_DIVISIONS = 90;
 const V_DIVISIONS = 10;
 
 const COLUMN_HEIGHT = 6;
 const HELIX_TWISTS = 2.5;
 const HELIX_RADIUS = 0.65;
-const RIBBON_WIDTH = 0.34; // each strand's own visible width (radial fin)
+const RIBBON_WIDTH = 0.34;
 
-const WAVE_WIDTH = 16;
-const WAVE_RIBBON_HEIGHT = 0.4;
-
-const VORTEX_CENTER = 0.5;
+const VORTEX_CENTER = 0.55;
 const VORTEX_WIDTH = 0.06;
 
 const vertexShader = /* glsl */ `
   uniform float uTime;
-  uniform float uMorph;
+  uniform float uSpread;
   uniform float uVortex;
   uniform float uDockFade;
   uniform float uGrowth;
@@ -38,7 +35,6 @@ const vertexShader = /* glsl */ `
   uniform float uPixelRatio;
   uniform float uSize;
 
-  attribute vec3 aWavePos;
   attribute vec2 aRandom;
   attribute float aT;
   attribute float aEdge;
@@ -50,22 +46,26 @@ const vertexShader = /* glsl */ `
   ${simplexNoise3D}
 
   void main() {
-    vec3 columnPos = position;
-    vec3 wavePos = aWavePos;
-    vec3 basePos = mix(columnPos, wavePos, uMorph);
+    vec3 basePos = position;
 
-    // Kept gentle relative to the grid spacing so rows ripple like flowing
-    // silk without breaking apart into noise — the row structure is the
-    // whole point, unlike a random-scatter cloud.
-    float noiseAmt = 0.16 * (1.0 - uReducedMotion * 0.85);
-    float n1 = snoise(vec3(basePos.xy * 0.5, uTime * 0.15 + aRandom.x * 10.0));
-    float n2 = snoise(vec3(basePos.yz * 0.5 + 5.0, uTime * 0.13 + aRandom.y * 10.0));
-    vec3 displaced = basePos + vec3(n1, n2 * 0.6, n1 * 0.4) * noiseAmt;
+    // Fixed per-particle scatter direction/magnitude (from the same random
+    // seed every frame, so particles converge along a consistent path
+    // rather than jittering to new random spots each frame).
+    vec2 scatterDir = normalize(aRandom - 0.5);
+    float scatterMag = 0.7 + aRandom.x * 1.6;
+    // Wider at the top than the bottom, matching the reference's tapered
+    // cone silhouette during the sparse/condensing stages.
+    float taper = mix(0.35, 1.5, aT);
+    vec3 scattered = basePos + vec3(scatterDir.x, (aRandom.y - 0.5) * 1.2, scatterDir.y) * scatterMag * taper * uSpread;
+
+    float noiseAmt = 0.14 * (1.0 - uReducedMotion * 0.85);
+    float n1 = snoise(vec3(scattered.xy * 0.5, uTime * 0.15 + aRandom.x * 10.0));
+    float n2 = snoise(vec3(scattered.yz * 0.5 + 5.0, uTime * 0.13 + aRandom.y * 10.0));
+    vec3 displaced = scattered + vec3(n1, n2 * 0.6, n1 * 0.4) * noiseAmt;
 
     // Growth and dock-fade share one mechanic: expand from / collapse to
     // the exact same origin point (screen center, matching the seed orb),
-    // so Stage 1's formation and Stage 3's dock read as one coherent
-    // object, not two different animations.
+    // so formation and dock read as one coherent object.
     float scale = uGrowth * uDockFade;
     displaced = mix(vec3(0.0), displaced, scale);
 
@@ -83,17 +83,21 @@ const vertexShader = /* glsl */ `
 
     vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
     // Calibrated so a point at the camera's look-at distance (~9 units)
-    // renders at roughly uSize pixels — NOT an arbitrary large constant,
-    // which previously produced ~50px+ points that fused into a blob.
+    // renders at roughly uSize pixels.
     float sizeAttenuation = uSize * uPixelRatio * (9.0 / -mvPosition.z);
     gl_PointSize = sizeAttenuation;
     gl_Position = projectionMatrix * mvPosition;
 
+    // Crossing-point brightness: boosts near where a strand swings close
+    // to the central axis — where the two strands visually intersect.
+    float radialDist = length(displaced.xz);
+    float crossBoost = smoothstep(HELIX_RADIUS_JS * 0.55, 0.0, radialDist) * (1.0 - uSpread);
+
     vColor = mix(vec3(1.0, 0.616, 0.180), vec3(0.184, 0.902, 0.820), aT);
     vAlpha = scale;
-    vEdge = aEdge;
+    vEdge = clamp(aEdge + crossBoost, 0.0, 1.0);
   }
-`;
+`.replace("HELIX_RADIUS_JS", String(HELIX_RADIUS));
 
 const fragmentShader = /* glsl */ `
   varying vec3 vColor;
@@ -107,9 +111,6 @@ const fragmentShader = /* glsl */ `
     float glow = smoothstep(0.5, 0.0, d);
     float core = smoothstep(0.15, 0.0, d);
 
-    // Edge-bright, interior-fade: particles at each strand's outer edge
-    // (vEdge near 1) read as the bright core row; interior particles
-    // (vEdge near 0) stay dim and diffuse.
     float brightness = mix(0.32, 1.0, vEdge);
     vec3 color = vColor * brightness + core * 0.5 * vEdge;
     float alpha = glow * vAlpha * mix(0.35, 1.0, vEdge);
@@ -120,8 +121,7 @@ const fragmentShader = /* glsl */ `
 
 function generateGridData() {
   const count = STRAND_COUNT * U_DIVISIONS * V_DIVISIONS;
-  const columnPos = new Float32Array(count * 3);
-  const wavePos = new Float32Array(count * 3);
+  const positions = new Float32Array(count * 3);
   const aEdge = new Float32Array(count);
   const aT = new Float32Array(count);
   const aRandom = new Float32Array(count * 2);
@@ -133,40 +133,20 @@ function generateGridData() {
     for (let ui = 0; ui < U_DIVISIONS; ui++) {
       const u = ui / (U_DIVISIONS - 1);
 
-      // Column: this strand's helix centerline.
       const helixAngle = u * HELIX_TWISTS * Math.PI * 2 + strandPhase;
       const ccx = Math.cos(helixAngle) * HELIX_RADIUS;
       const ccz = Math.sin(helixAngle) * HELIX_RADIUS;
       const ccy = (u - 0.5) * COLUMN_HEIGHT;
-      // Radial direction — the ribbon's width axis, so it visibly widens
-      // and narrows as the strand twists in and out of a front view,
-      // rather than being a thin tube that never reads as having width.
       const radialX = Math.cos(helixAngle);
       const radialZ = Math.sin(helixAngle);
 
-      // Wave: same strand identity (same u), remapped onto a wide
-      // horizontal undulating band for Part 2. The two strands ride
-      // slightly offset so it still reads as a woven double band.
-      const wx = (u - 0.5) * WAVE_WIDTH;
-      const strandWaveOffset = s === 0 ? 0.35 : -0.35;
-      const wy =
-        Math.sin(wx * 0.5 + 1.2 + strandPhase * 0.5) * 1.1 +
-        Math.sin(wx * 0.17 - 0.4) * 0.6 +
-        strandWaveOffset;
-
       for (let vi = 0; vi < V_DIVISIONS; vi++) {
-        const v = vi / (V_DIVISIONS - 1) - 0.5; // -0.5..0.5 across the ribbon
+        const v = vi / (V_DIVISIONS - 1) - 0.5;
 
-        columnPos[idx * 3] = ccx + v * RIBBON_WIDTH * radialX;
-        columnPos[idx * 3 + 1] = ccy;
-        columnPos[idx * 3 + 2] = ccz + v * RIBBON_WIDTH * radialZ;
+        positions[idx * 3] = ccx + v * RIBBON_WIDTH * radialX;
+        positions[idx * 3 + 1] = ccy;
+        positions[idx * 3 + 2] = ccz + v * RIBBON_WIDTH * radialZ;
 
-        wavePos[idx * 3] = wx;
-        wavePos[idx * 3 + 1] = wy + v * WAVE_RIBBON_HEIGHT;
-        wavePos[idx * 3 + 2] = (Math.random() - 0.5) * 0.4;
-
-        // Peaks at the ribbon's two outer edges (v = ±0.5) — its
-        // silhouette, which is what should read as the bright strand.
         aEdge[idx] = Math.pow(Math.abs(v) * 2.0, 1.3);
         aT[idx] = u;
         aRandom[idx * 2] = Math.random();
@@ -177,7 +157,7 @@ function generateGridData() {
     }
   }
 
-  return { columnPos, wavePos, aEdge, aT, aRandom, count };
+  return { positions, aEdge, aT, aRandom, count };
 }
 
 function generateStarfieldPositions(count: number) {
@@ -227,7 +207,7 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
-      uMorph: { value: 0 },
+      uSpread: { value: 1.4 },
       uVortex: { value: 0 },
       uDockFade: { value: 1 },
       uGrowth: { value: 0 },
@@ -245,43 +225,45 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
     u.uTime.value = timeRef.current;
 
     if (!introState.done) {
-      // Stage 1 (0–40% of the pin): grow from the seed point.
-      // Stage 2 (40–60%): hold at full size — the "landing" moment.
+      // 0-8%: quick pop-in from the seed point.
+      // 8-55%: sparse wide cone (1A) -> condensing (1B) -> resolved double
+      // helix (1C) — one continuous spread interpolation, not discrete
+      // stage jumps.
+      // 55-65%: landing hold, fully resolved.
       const p = introState.progress;
-      const growthTarget = THREE.MathUtils.smoothstep(p, 0, 0.4);
-      u.uGrowth.value = THREE.MathUtils.lerp(u.uGrowth.value, growthTarget, 0.15);
-      u.uMorph.value = THREE.MathUtils.lerp(u.uMorph.value, 0, 0.15);
+      const growthTarget = THREE.MathUtils.smoothstep(p, 0, 0.08);
+      const spreadTarget = THREE.MathUtils.lerp(1.4, 0, THREE.MathUtils.smoothstep(p, 0.08, 0.55));
+      u.uGrowth.value = THREE.MathUtils.lerp(u.uGrowth.value, growthTarget, 0.18);
+      u.uSpread.value = THREE.MathUtils.lerp(u.uSpread.value, spreadTarget, 0.1);
       u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, introState.dockFade, 0.22);
       u.uVortex.value = 0;
     } else {
       // Part 2: driven by actual scroll position past the pin's own
-      // measured end (ScrollTrigger's real self.end), not a guess — so
-      // there's no drift/jump at the Stage 3→4 handoff.
+      // measured end (ScrollTrigger's real self.end) — no drift/jump at
+      // the Stage 3->4 handoff.
       const totalScroll = Math.max(
         document.documentElement.scrollHeight - window.innerHeight - introState.endScrollY,
         1
       );
       const rest = THREE.MathUtils.clamp((window.scrollY - introState.endScrollY) / totalScroll, 0, 1);
-      const morphTarget = THREE.MathUtils.smoothstep(rest, 0.0, 0.18);
+
+      // Re-diverges from the resolved helix into a wide, dense sparkle
+      // cone/flow, then stays there for the remainder of the page.
+      const spreadTarget = THREE.MathUtils.lerp(0, 2.0, THREE.MathUtils.smoothstep(rest, 0.0, 0.22));
       u.uGrowth.value = 1;
       u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, 1, 0.15);
-      u.uMorph.value = THREE.MathUtils.lerp(u.uMorph.value, morphTarget, 0.06);
+      u.uSpread.value = THREE.MathUtils.lerp(u.uSpread.value, spreadTarget, 0.06);
 
       const dist = Math.abs(rest - VORTEX_CENTER);
       const vortexTarget = reducedMotion ? 0 : Math.max(0, 1 - dist / VORTEX_WIDTH);
       u.uVortex.value = THREE.MathUtils.lerp(u.uVortex.value, vortexTarget, 0.08);
     }
-
-    // Keep scrollProgress import alive for other consumers of Lenis's
-    // eased value; Part 2 here intentionally uses raw scrollY (see above).
-    void scrollProgress.current;
   });
 
   return (
     <points>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[GRID_DATA.columnPos, 3]} />
-        <bufferAttribute attach="attributes-aWavePos" args={[GRID_DATA.wavePos, 3]} />
+        <bufferAttribute attach="attributes-position" args={[GRID_DATA.positions, 3]} />
         <bufferAttribute attach="attributes-aRandom" args={[GRID_DATA.aRandom, 2]} />
         <bufferAttribute attach="attributes-aT" args={[GRID_DATA.aT, 1]} />
         <bufferAttribute attach="attributes-aEdge" args={[GRID_DATA.aEdge, 1]} />
@@ -325,10 +307,9 @@ export default function ParticleField() {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setReducedMotion(reduced);
-    // Reduced motion gets the same plain fallback as a low-end device —
-    // no WebGL helix animation at all, just the static docked logo and a
-    // calm gradient. This is the one unambiguous reading of "skip straight
-    // to the end state, no animation."
+    // Reduced motion gets the same plain fallback as a low-end device — no
+    // WebGL animation at all, just the static docked logo and a calm
+    // gradient. The one unambiguous reading of "skip to the end state."
     setMode(reduced || isLowEndDevice() ? "fallback" : "particles");
   }, []);
 
@@ -376,8 +357,8 @@ export default function ParticleField() {
           <Suspense fallback={null}>
             <Selection>
               {/* Bloom is isolated to the particle grid only, via Select —
-                  the starfield and (obviously) all page text/DOM content
-                  sit outside this WebGL scene entirely and are unaffected. */}
+                  the starfield and all page text/DOM content (outside
+                  this WebGL scene entirely) are unaffected either way. */}
               <EffectComposer multisampling={0} autoClear={false}>
                 <SelectiveBloom
                   intensity={0.35}
