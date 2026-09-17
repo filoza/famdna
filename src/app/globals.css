@@ -11,6 +11,10 @@
   --cyan: #2f9e8f;
   --cyan-soft: #8fd4c6;
   --sand: #e8ddc4;
+
+  /* emil-design-eng: strong custom easing curves, not the weak CSS built-ins */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 @theme inline {
@@ -114,4 +118,22 @@ body {
 
 .animate-emblem-dance {
   animation: emblem-dance 2.8s ease-in-out infinite;
+}
+
+/* emil-design-eng: press feedback on any pressable element — instant,
+   subtle, transform-only (GPU), under 160ms. */
+.btn-press {
+  transition: transform 140ms var(--ease-out);
+}
+
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-emblem-dance,
+  .text-gradient-shimmer,
+  .animate-marquee {
+    animation: none;
+  }
 }

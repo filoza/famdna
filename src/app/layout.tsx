@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Serif, Manrope } from "next/font/google";
 import SmoothScroll from "@/components/SmoothScroll";
-import HelixWaveBackground from "@/components/HelixWaveBackground";
+import ParticleField from "@/components/ParticleField";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -35,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <SmoothScroll />
-        <HelixWaveBackground />
+        <ParticleField />
         {children}
       </body>
     </html>

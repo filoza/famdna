@@ -15,7 +15,7 @@ export default function SweepButton({ href, children, accent = "orange", classNa
   return (
     <a
       href={href}
-      className={`group relative inline-flex items-center overflow-hidden rounded-full border ${border} px-7 py-3 text-sm font-semibold ${text} ${className ?? ""}`}
+      className={`btn-press group relative inline-flex items-center overflow-hidden rounded-full border ${border} px-7 py-3 text-sm font-semibold ${text} ${className ?? ""}`}
     >
       <span
         className={`absolute inset-0 -translate-x-full ${fill} transition-transform duration-500 ease-[cubic-bezier(.65,0,.35,1)] group-hover:translate-x-0`}

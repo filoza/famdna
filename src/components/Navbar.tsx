@@ -59,7 +59,7 @@ export default function Navbar() {
 
         <a
           href="#contact"
-          className="hidden rounded-full border border-foreground/20 px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-orange hover:text-orange-soft md:inline-block"
+          className="btn-press hidden rounded-full border border-foreground/20 px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-orange hover:text-orange-soft md:inline-block"
         >
           Contact Us
         </a>
