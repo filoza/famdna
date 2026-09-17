@@ -10,19 +10,20 @@ import { introState } from "@/lib/introState";
 import { isLowEndDevice } from "@/lib/deviceCapability";
 
 // A UV grid mapped onto a curved surface — U runs along the shape's length,
-// V runs around its circumference/width. Each fixed-V row, sampled densely
+// V runs across each strand's own width. Each fixed-V row, sampled densely
 // along U, reads as one continuous wavy strand; the full grid together
-// reads as a woven mesh, not a scattered cloud.
+// reads as a woven mesh, not a scattered cloud and not a solid tube.
+const STRAND_COUNT = 2; // two genuinely separate strands, not one tube
 const U_DIVISIONS = 90;
-const V_DIVISIONS = 14;
+const V_DIVISIONS = 10;
 
 const COLUMN_HEIGHT = 6;
-const HELIX_TWISTS = 3;
-const HELIX_RADIUS = 0.55;
-const TUBE_RADIUS = 0.14;
+const HELIX_TWISTS = 2.5;
+const HELIX_RADIUS = 0.65;
+const RIBBON_WIDTH = 0.34; // each strand's own visible width (radial fin)
 
 const WAVE_WIDTH = 16;
-const WAVE_TUBE_RADIUS = 0.16;
+const WAVE_RIBBON_HEIGHT = 0.4;
 
 const VORTEX_CENTER = 0.5;
 const VORTEX_WIDTH = 0.06;
@@ -55,16 +56,20 @@ const vertexShader = /* glsl */ `
 
     // Kept gentle relative to the grid spacing so rows ripple like flowing
     // silk without breaking apart into noise — the row structure is the
-    // whole point, unlike the earlier random-scatter cloud.
-    float noiseAmt = 0.18 * (1.0 - uReducedMotion * 0.85);
+    // whole point, unlike a random-scatter cloud.
+    float noiseAmt = 0.16 * (1.0 - uReducedMotion * 0.85);
     float n1 = snoise(vec3(basePos.xy * 0.5, uTime * 0.15 + aRandom.x * 10.0));
     float n2 = snoise(vec3(basePos.yz * 0.5 + 5.0, uTime * 0.13 + aRandom.y * 10.0));
     vec3 displaced = basePos + vec3(n1, n2 * 0.6, n1 * 0.4) * noiseAmt;
 
-    // Column growth: particles rise into place during Stage 1.
-    displaced.y = mix(basePos.y - 4.0, displaced.y, uGrowth);
+    // Growth and dock-fade share one mechanic: expand from / collapse to
+    // the exact same origin point (screen center, matching the seed orb),
+    // so Stage 1's formation and Stage 3's dock read as one coherent
+    // object, not two different animations.
+    float scale = uGrowth * uDockFade;
+    displaced = mix(vec3(0.0), displaced, scale);
 
-    // Vortex: pull toward center + spiral rotation.
+    // Vortex: pull toward center + spiral rotation (Part 2 only).
     if (uVortex > 0.001) {
       vec2 offs = displaced.xy;
       float dist = length(offs);
@@ -76,16 +81,16 @@ const vertexShader = /* glsl */ `
       displaced.xy = mix(offs, rotated * (1.0 - pull * 0.6), uVortex);
     }
 
-    // Dock fade: collapse the whole grid toward the origin point.
-    displaced = mix(vec3(0.0), displaced, uDockFade);
-
     vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
-    float sizeAttenuation = uSize * uPixelRatio * (200.0 / -mvPosition.z);
-    gl_PointSize = sizeAttenuation * mix(1.0, 0.15, 1.0 - uDockFade) * mix(0.05, 1.0, uGrowth);
+    // Calibrated so a point at the camera's look-at distance (~9 units)
+    // renders at roughly uSize pixels — NOT an arbitrary large constant,
+    // which previously produced ~50px+ points that fused into a blob.
+    float sizeAttenuation = uSize * uPixelRatio * (9.0 / -mvPosition.z);
+    gl_PointSize = sizeAttenuation;
     gl_Position = projectionMatrix * mvPosition;
 
     vColor = mix(vec3(1.0, 0.616, 0.180), vec3(0.184, 0.902, 0.820), aT);
-    vAlpha = uDockFade * uGrowth;
+    vAlpha = scale;
     vEdge = aEdge;
   }
 `;
@@ -102,19 +107,19 @@ const fragmentShader = /* glsl */ `
     float glow = smoothstep(0.5, 0.0, d);
     float core = smoothstep(0.15, 0.0, d);
 
-    // Edge-bright, interior-fade: particles at the tube's silhouette edge
-    // (vEdge near 1) read as the bright core strand; interior particles
+    // Edge-bright, interior-fade: particles at each strand's outer edge
+    // (vEdge near 1) read as the bright core row; interior particles
     // (vEdge near 0) stay dim and diffuse.
-    float brightness = mix(0.35, 1.0, vEdge);
+    float brightness = mix(0.32, 1.0, vEdge);
     vec3 color = vColor * brightness + core * 0.5 * vEdge;
-    float alpha = glow * vAlpha * mix(0.4, 1.0, vEdge);
+    float alpha = glow * vAlpha * mix(0.35, 1.0, vEdge);
 
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
-function generateGridData(uDiv: number, vDiv: number) {
-  const count = uDiv * vDiv;
+function generateGridData() {
+  const count = STRAND_COUNT * U_DIVISIONS * V_DIVISIONS;
   const columnPos = new Float32Array(count * 3);
   const wavePos = new Float32Array(count * 3);
   const aEdge = new Float32Array(count);
@@ -122,52 +127,53 @@ function generateGridData(uDiv: number, vDiv: number) {
   const aRandom = new Float32Array(count * 2);
 
   let idx = 0;
-  for (let ui = 0; ui < uDiv; ui++) {
-    const u = ui / (uDiv - 1);
+  for (let s = 0; s < STRAND_COUNT; s++) {
+    const strandPhase = s * Math.PI; // two strands, 180° apart
 
-    // Column: a single tube spiraling around the vertical axis. Its own
-    // left/right silhouette edges (see aEdge below) are what read as a
-    // "double helix" as it twists, rather than two separately-tracked
-    // strands — matching a UV-parameterized tube/curve surface.
-    const helixAngle = u * HELIX_TWISTS * Math.PI * 2;
-    const ccx = Math.cos(helixAngle) * HELIX_RADIUS;
-    const ccz = Math.sin(helixAngle) * HELIX_RADIUS;
-    const ccy = (u - 0.5) * COLUMN_HEIGHT;
+    for (let ui = 0; ui < U_DIVISIONS; ui++) {
+      const u = ui / (U_DIVISIONS - 1);
 
-    // Wave: the same grid identity (same u, v per particle), remapped onto
-    // a wide horizontal undulating band for Part 2.
-    const wx = (u - 0.5) * WAVE_WIDTH;
-    const wy = Math.sin(wx * 0.5 + 1.2) * 1.1 + Math.sin(wx * 0.17 - 0.4) * 0.6;
+      // Column: this strand's helix centerline.
+      const helixAngle = u * HELIX_TWISTS * Math.PI * 2 + strandPhase;
+      const ccx = Math.cos(helixAngle) * HELIX_RADIUS;
+      const ccz = Math.sin(helixAngle) * HELIX_RADIUS;
+      const ccy = (u - 0.5) * COLUMN_HEIGHT;
+      // Radial direction — the ribbon's width axis, so it visibly widens
+      // and narrows as the strand twists in and out of a front view,
+      // rather than being a thin tube that never reads as having width.
+      const radialX = Math.cos(helixAngle);
+      const radialZ = Math.sin(helixAngle);
 
-    for (let vi = 0; vi < vDiv; vi++) {
-      const v = vi / (vDiv - 1);
-      const crossAngle = v * Math.PI * 2;
-      const cosC = Math.cos(crossAngle);
-      const sinC = Math.sin(crossAngle);
+      // Wave: same strand identity (same u), remapped onto a wide
+      // horizontal undulating band for Part 2. The two strands ride
+      // slightly offset so it still reads as a woven double band.
+      const wx = (u - 0.5) * WAVE_WIDTH;
+      const strandWaveOffset = s === 0 ? 0.35 : -0.35;
+      const wy =
+        Math.sin(wx * 0.5 + 1.2 + strandPhase * 0.5) * 1.1 +
+        Math.sin(wx * 0.17 - 0.4) * 0.6 +
+        strandWaveOffset;
 
-      const colOx = TUBE_RADIUS * cosC * Math.cos(helixAngle);
-      const colOz = TUBE_RADIUS * cosC * Math.sin(helixAngle);
-      const colOy = TUBE_RADIUS * sinC;
+      for (let vi = 0; vi < V_DIVISIONS; vi++) {
+        const v = vi / (V_DIVISIONS - 1) - 0.5; // -0.5..0.5 across the ribbon
 
-      columnPos[idx * 3] = ccx + colOx;
-      columnPos[idx * 3 + 1] = ccy + colOy;
-      columnPos[idx * 3 + 2] = ccz + colOz;
+        columnPos[idx * 3] = ccx + v * RIBBON_WIDTH * radialX;
+        columnPos[idx * 3 + 1] = ccy;
+        columnPos[idx * 3 + 2] = ccz + v * RIBBON_WIDTH * radialZ;
 
-      const waveOy = WAVE_TUBE_RADIUS * sinC;
-      const waveOz = WAVE_TUBE_RADIUS * cosC;
+        wavePos[idx * 3] = wx;
+        wavePos[idx * 3 + 1] = wy + v * WAVE_RIBBON_HEIGHT;
+        wavePos[idx * 3 + 2] = (Math.random() - 0.5) * 0.4;
 
-      wavePos[idx * 3] = wx;
-      wavePos[idx * 3 + 1] = wy + waveOy;
-      wavePos[idx * 3 + 2] = waveOz;
+        // Peaks at the ribbon's two outer edges (v = ±0.5) — its
+        // silhouette, which is what should read as the bright strand.
+        aEdge[idx] = Math.pow(Math.abs(v) * 2.0, 1.3);
+        aT[idx] = u;
+        aRandom[idx * 2] = Math.random();
+        aRandom[idx * 2 + 1] = Math.random();
 
-      // Peaks at crossAngle 0/π (the tube's leftmost/rightmost points as
-      // seen from a front-on camera) — its silhouette edge.
-      aEdge[idx] = Math.pow(Math.abs(cosC), 1.4);
-      aT[idx] = u;
-      aRandom[idx * 2] = Math.random();
-      aRandom[idx * 2 + 1] = Math.random();
-
-      idx++;
+        idx++;
+      }
     }
   }
 
@@ -187,7 +193,7 @@ function generateStarfieldPositions(count: number) {
 // Computed once at module evaluation (not during render) — the geometry is
 // randomized but static for the page's lifetime, so this sidesteps the
 // render-purity rule around calling Math.random() inside component bodies.
-const GRID_DATA = generateGridData(U_DIVISIONS, V_DIVISIONS);
+const GRID_DATA = generateGridData();
 const STARFIELD_POSITIONS = generateStarfieldPositions(500);
 
 function Starfield() {
@@ -216,7 +222,6 @@ function Starfield() {
 
 function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  const introEndFractionRef = useRef(0.15);
   const timeRef = useRef(0);
 
   const uniforms = useMemo(
@@ -228,26 +233,10 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
       uGrowth: { value: 0 },
       uReducedMotion: { value: reducedMotion ? 1 : 0 },
       uPixelRatio: { value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 1.5) : 1 },
-      uSize: { value: 2.1 },
+      uSize: { value: 2.0 },
     }),
     [reducedMotion]
   );
-
-  useEffect(() => {
-    // Measure how much of the total page scroll the pinned intro consumes,
-    // so Part 2's progress can be remapped to start fresh right after it.
-    const measure = () => {
-      const doc = document.documentElement;
-      const totalScroll = doc.scrollHeight - window.innerHeight;
-      if (totalScroll > 0) {
-        const spacer = document.querySelector(".pin-spacer");
-        const introHeight = spacer ? spacer.getBoundingClientRect().height : totalScroll * 0.15;
-        introEndFractionRef.current = Math.min(Math.max(introHeight / totalScroll, 0.03), 0.4);
-      }
-    };
-    const t = window.setTimeout(measure, 600);
-    return () => window.clearTimeout(t);
-  }, []);
 
   useFrame((_, delta) => {
     timeRef.current += delta;
@@ -256,20 +245,24 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
     u.uTime.value = timeRef.current;
 
     if (!introState.done) {
+      // Stage 1 (0–40% of the pin): grow from the seed point.
+      // Stage 2 (40–60%): hold at full size — the "landing" moment.
       const p = introState.progress;
-      const growthTarget = THREE.MathUtils.smoothstep(p, 0, 0.55);
-      u.uGrowth.value = THREE.MathUtils.lerp(u.uGrowth.value, growthTarget, 0.12);
-      u.uMorph.value = THREE.MathUtils.lerp(u.uMorph.value, 0, 0.12);
-      u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, introState.dockFade, 0.18);
-      u.uVortex.value = THREE.MathUtils.lerp(u.uVortex.value, 0, 0.1);
+      const growthTarget = THREE.MathUtils.smoothstep(p, 0, 0.4);
+      u.uGrowth.value = THREE.MathUtils.lerp(u.uGrowth.value, growthTarget, 0.15);
+      u.uMorph.value = THREE.MathUtils.lerp(u.uMorph.value, 0, 0.15);
+      u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, introState.dockFade, 0.22);
+      u.uVortex.value = 0;
     } else {
-      const introFraction = introEndFractionRef.current;
-      const rest = THREE.MathUtils.clamp(
-        (scrollProgress.current - introFraction) / Math.max(1 - introFraction, 0.01),
-        0,
+      // Part 2: driven by actual scroll position past the pin's own
+      // measured end (ScrollTrigger's real self.end), not a guess — so
+      // there's no drift/jump at the Stage 3→4 handoff.
+      const totalScroll = Math.max(
+        document.documentElement.scrollHeight - window.innerHeight - introState.endScrollY,
         1
       );
-      const morphTarget = THREE.MathUtils.smoothstep(rest, 0.0, 0.22);
+      const rest = THREE.MathUtils.clamp((window.scrollY - introState.endScrollY) / totalScroll, 0, 1);
+      const morphTarget = THREE.MathUtils.smoothstep(rest, 0.0, 0.18);
       u.uGrowth.value = 1;
       u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, 1, 0.15);
       u.uMorph.value = THREE.MathUtils.lerp(u.uMorph.value, morphTarget, 0.06);
@@ -278,6 +271,10 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
       const vortexTarget = reducedMotion ? 0 : Math.max(0, 1 - dist / VORTEX_WIDTH);
       u.uVortex.value = THREE.MathUtils.lerp(u.uVortex.value, vortexTarget, 0.08);
     }
+
+    // Keep scrollProgress import alive for other consumers of Lenis's
+    // eased value; Part 2 here intentionally uses raw scrollY (see above).
+    void scrollProgress.current;
   });
 
   return (
@@ -325,9 +322,14 @@ export default function ParticleField() {
     // this can't be a lazy useState initializer without risking a
     // server/client render mismatch — "loading" (renders nothing) is the
     // correct, matching first paint on both.
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    setMode(isLowEndDevice() ? "fallback" : "particles");
+    setReducedMotion(reduced);
+    // Reduced motion gets the same plain fallback as a low-end device —
+    // no WebGL helix animation at all, just the static docked logo and a
+    // calm gradient. This is the one unambiguous reading of "skip straight
+    // to the end state, no animation."
+    setMode(reduced || isLowEndDevice() ? "fallback" : "particles");
   }, []);
 
   useEffect(() => {
@@ -378,11 +380,11 @@ export default function ParticleField() {
                   sit outside this WebGL scene entirely and are unaffected. */}
               <EffectComposer multisampling={0} autoClear={false}>
                 <SelectiveBloom
-                  intensity={0.45}
+                  intensity={0.35}
                   luminanceThreshold={0.15}
                   luminanceSmoothing={0.4}
                   mipmapBlur
-                  radius={0.5}
+                  radius={0.4}
                 />
               </EffectComposer>
               <Starfield />

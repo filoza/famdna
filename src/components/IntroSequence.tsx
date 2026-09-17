@@ -12,6 +12,10 @@ const BRAND_CYAN = "#2fe6d1";
 // This component owns only the DOM "seed point" and the GSAP ScrollTrigger
 // that paces the intro — the particle column/burst itself is rendered by
 // ParticleField (WebGL), driven by the shared introState this writes to.
+//
+// Timeline positions below are literal 0–1 fractions of the pin's own
+// scroll range, matching spec 1:1: Stage 1 growth 0–40%, Stage 2 landing
+// hold 40–60%, Stage 3 dock 60–90%, Stage 4 tail 90–100%.
 export default function IntroSequence() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
@@ -23,7 +27,9 @@ export default function IntroSequence() {
 
     if (prefersReducedMotion) {
       // Skip straight to the Stage 4 end state: logo already docked, no
-      // intro overlay, particle system starts directly in its Part 2 state.
+      // intro overlay. ParticleField treats reduced-motion the same as a
+      // low-end device (plain fallback background, no WebGL at all), so
+      // introState's values here don't matter beyond staying consistent.
       introState.progress = 1;
       introState.dockFade = 0;
       introState.done = true;
@@ -71,6 +77,9 @@ export default function IntroSequence() {
           pin: true,
           scrub: 1,
           anticipatePin: 1,
+          onRefresh: (self) => {
+            introState.endScrollY = self.end;
+          },
           onUpdate: (self) => {
             introState.progress = self.progress;
           },
@@ -83,16 +92,22 @@ export default function IntroSequence() {
         },
       });
 
-      // Stages 0-2 (column seed → growth → landing) are entirely driven by
-      // ParticleField reading introState.progress — this placeholder tween
-      // just occupies that portion of the scrubbed timeline.
-      tl.to({}, { duration: 0.72 });
+      // Stages 1-2 (0-60%): growth + landing hold, entirely driven by
+      // ParticleField reading introState.progress — this placeholder just
+      // occupies that portion of the scrubbed timeline.
+      tl.to({}, { duration: 0.6 });
 
-      // Stage 3 — dock: the WebGL column fades out in the same window the
-      // orb Flips into the navbar, so they read as one continuous handoff.
-      if (dockTween) tl.add(dockTween, 0.75);
-      tl.to(introState, { dockFade: 0, duration: 0.22, ease: "power2.in" }, 0.75);
-      tl.to(orb, { opacity: 0, duration: 0.1 }, 0.95);
+      // Stage 3 (60-90%) — dock: the WebGL grid collapses back to the seed
+      // point FIRST (fast, finishes well before the Flip starts), so only
+      // the small orb is left to visibly travel — one coherent object
+      // shrinking then moving, not two things happening at once.
+      tl.to(introState, { dockFade: 0, duration: 0.15, ease: "power2.in" }, 0.6);
+      if (dockTween) tl.add(dockTween, 0.72);
+      tl.to(orb, { opacity: 0, duration: 0.08 }, 0.86);
+
+      // Pad to exactly 100% so the stage percentages above map 1:1 to the
+      // scrollTrigger's own progress.
+      tl.to({}, { duration: 0.001 }, 1.0);
     }, sectionRef);
 
     return () => ctx.revert();
