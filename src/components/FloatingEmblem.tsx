@@ -38,7 +38,8 @@ export default function FloatingEmblem() {
             initial={{ opacity: 0, y: 12, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            style={{ transformOrigin: "bottom right" }}
             className="absolute right-0 bottom-[calc(100%+16px)] w-60 overflow-hidden rounded-2xl border border-border bg-background-alt shadow-xl"
           >
             <a

@@ -24,12 +24,16 @@ export default function Navbar() {
 
   return (
     <header
-      className={`fixed top-0 z-50 w-full transition-colors duration-300 ${
+      className={`fixed top-0 z-50 w-full transition-colors duration-[250ms] ease-[var(--ease-out)] ${
         scrolled ? "bg-background/80 backdrop-blur-md border-b border-border" : "bg-transparent"
       }`}
     >
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a id="nav-logo" href="#top" className="font-display text-2xl font-semibold tracking-tight">
+        <a
+          id="nav-logo"
+          href="#top"
+          className="btn-press font-display text-2xl font-semibold tracking-tight transition-[filter] duration-[250ms] ease-[var(--ease-out)] hover:brightness-125"
+        >
           <span className="text-orange">D.</span>
           <span className="text-cyan">N.A.</span>
         </a>
@@ -66,12 +70,12 @@ export default function Navbar() {
 
         <button
           aria-label="Toggle menu"
-          className="flex flex-col gap-1.5 md:hidden"
+          className="btn-press flex flex-col gap-1.5 md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
-          <span className={`h-0.5 w-6 bg-foreground transition-transform ${open ? "translate-y-2 rotate-45" : ""}`} />
-          <span className={`h-0.5 w-6 bg-foreground transition-opacity ${open ? "opacity-0" : ""}`} />
-          <span className={`h-0.5 w-6 bg-foreground transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`} />
+          <span className={`h-0.5 w-6 bg-foreground transition-transform duration-[220ms] ease-[var(--ease-out)] ${open ? "translate-y-2 rotate-45" : ""}`} />
+          <span className={`h-0.5 w-6 bg-foreground transition-opacity duration-[220ms] ease-[var(--ease-out)] ${open ? "opacity-0" : ""}`} />
+          <span className={`h-0.5 w-6 bg-foreground transition-transform duration-[220ms] ease-[var(--ease-out)] ${open ? "-translate-y-2 -rotate-45" : ""}`} />
         </button>
       </nav>
 

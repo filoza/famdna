@@ -32,6 +32,9 @@ export default function Home() {
         <Impact />
         <CTA />
       </main>
+      {/* Empty space for the closing ocean-wave particle moment (Stage 9) —
+          genuinely past all content, so the wave never overlaps text. */}
+      <div className="h-[70vh]" aria-hidden="true" />
       <Footer />
       <FloatingEmblem />
     </>
