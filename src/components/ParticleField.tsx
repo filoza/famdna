@@ -2,39 +2,44 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { EffectComposer, Selection, Select, SelectiveBloom } from "@react-three/postprocessing";
+import { EffectComposer, Selection, Select, SelectiveBloom, ChromaticAberration } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { simplexNoise3D } from "@/lib/noiseGLSL";
 import { introState } from "@/lib/introState";
+import { scrollVelocity } from "@/lib/scrollVelocity";
+import { liquidIntensity } from "@/lib/liquidIntensity";
+import { sampleTextPoints } from "@/lib/sampleTextPoints";
 import { isLowEndDevice } from "@/lib/deviceCapability";
 
-// A UV grid mapped onto a double-helix surface — U runs along its length,
-// V runs across each strand's own width. One fixed geometry throughout;
-// "sparse cloud" vs "condensing column" vs "resolved helix" vs "wide flow
-// further down the page" are all the SAME grid at different `spread`
-// values, not different techniques or a position-morph between shapes.
-const STRAND_COUNT = 2;
-const U_DIVISIONS = 90;
-const V_DIVISIONS = 10;
-
-const COLUMN_HEIGHT = 6;
-const HELIX_TWISTS = 2.5;
+// One particle identity (1800 points) carried through every shape in the
+// chain: swirl -> orb -> wordmark -> helix -> vortex -> wave. Each shape is
+// a UV-grid / parametric surface sampled into a position array of the same
+// length — never random scatter, never a solid mesh.
+const TOTAL_COUNT = 1800;
 const HELIX_RADIUS = 0.65;
-const RIBBON_WIDTH = 0.34;
 
-const VORTEX_CENTER = 0.55;
-const VORTEX_WIDTH = 0.06;
+function mapRange(v: number, inMin: number, inMax: number, outMin: number, outMax: number) {
+  const t = THREE.MathUtils.clamp((v - inMin) / (inMax - inMin), 0, 1);
+  return THREE.MathUtils.lerp(outMin, outMax, t);
+}
 
 const vertexShader = /* glsl */ `
   uniform float uTime;
-  uniform float uSpread;
-  uniform float uVortex;
-  uniform float uDockFade;
-  uniform float uGrowth;
+  uniform float uMorphT; // 0..4 chain position: swirl->orb->wordmark->helix->vortex
+  uniform float uWaveBlend; // 0..1, vortex -> wave (past all content)
+  uniform float uLiquid; // 0..1, liquid/chromatic distortion intensity (Stage 2)
+  uniform float uVortexSpin; // accumulated radians, scroll-velocity-driven
+  uniform float uOpacity;
   uniform float uReducedMotion;
   uniform float uPixelRatio;
   uniform float uSize;
 
+  attribute vec3 pSwirlParams; // radius, height, angleSeed
+  attribute vec3 pOrb;
+  attribute vec3 pWordmark;
+  attribute vec3 pHelix;
+  attribute vec3 pVortexParams; // radius, height, angleSeed
+  attribute vec3 pWave;
   attribute vec2 aRandom;
   attribute float aT;
   attribute float aEdge;
@@ -45,59 +50,60 @@ const vertexShader = /* glsl */ `
 
   ${simplexNoise3D}
 
+  vec3 computeSwirl() {
+    float angle = pSwirlParams.z + uTime * (0.18 + aRandom.x * 0.12);
+    return vec3(cos(angle) * pSwirlParams.x, pSwirlParams.y, sin(angle) * pSwirlParams.x);
+  }
+
+  vec3 computeVortex() {
+    float angle = pVortexParams.z + uVortexSpin;
+    return vec3(cos(angle) * pVortexParams.x, pVortexParams.y, sin(angle) * pVortexParams.x);
+  }
+
   void main() {
-    vec3 basePos = position;
+    vec3 swirlPos = computeSwirl();
+    vec3 vortexPos = computeVortex();
 
-    // Fixed per-particle scatter direction/magnitude (from the same random
-    // seed every frame, so particles converge along a consistent path
-    // rather than jittering to new random spots each frame).
-    vec2 scatterDir = normalize(aRandom - 0.5);
-    float scatterMag = 0.7 + aRandom.x * 1.6;
-    // Wider at the top than the bottom, matching the reference's tapered
-    // cone silhouette during the sparse/condensing stages.
-    float taper = mix(0.35, 1.5, aT);
-    vec3 scattered = basePos + vec3(scatterDir.x, (aRandom.y - 0.5) * 1.2, scatterDir.y) * scatterMag * taper * uSpread;
-
-    float noiseAmt = 0.14 * (1.0 - uReducedMotion * 0.85);
-    float n1 = snoise(vec3(scattered.xy * 0.5, uTime * 0.15 + aRandom.x * 10.0));
-    float n2 = snoise(vec3(scattered.yz * 0.5 + 5.0, uTime * 0.13 + aRandom.y * 10.0));
-    vec3 displaced = scattered + vec3(n1, n2 * 0.6, n1 * 0.4) * noiseAmt;
-
-    // Growth and dock-fade share one mechanic: expand from / collapse to
-    // the exact same origin point (screen center, matching the seed orb),
-    // so formation and dock read as one coherent object.
-    float scale = uGrowth * uDockFade;
-    displaced = mix(vec3(0.0), displaced, scale);
-
-    // Vortex: pull toward center + spiral rotation (Part 2 only).
-    if (uVortex > 0.001) {
-      vec2 offs = displaced.xy;
-      float dist = length(offs);
-      float pull = uVortex * smoothstep(5.0, 0.0, dist);
-      float angle = uVortex * 2.4 * (1.0 - dist / 5.0);
-      float ca = cos(angle);
-      float sa = sin(angle);
-      vec2 rotated = mat2(ca, -sa, sa, ca) * offs;
-      displaced.xy = mix(offs, rotated * (1.0 - pull * 0.6), uVortex);
+    vec3 morphed;
+    if (uMorphT < 1.0) {
+      morphed = mix(swirlPos, pOrb, uMorphT);
+    } else if (uMorphT < 2.0) {
+      morphed = mix(pOrb, pWordmark, uMorphT - 1.0);
+    } else if (uMorphT < 3.0) {
+      morphed = mix(pWordmark, pHelix, uMorphT - 2.0);
+    } else {
+      morphed = mix(pHelix, vortexPos, clamp(uMorphT - 3.0, 0.0, 1.0));
     }
 
+    vec3 withWave = mix(morphed, pWave, uWaveBlend);
+
+    // Liquid distortion: organic warping during Stage 2, on top of the
+    // (still orb-shaped) particles.
+    float liquidN = snoise(vec3(withWave.xy * 1.2, uTime * 0.4 + aRandom.x * 6.0));
+    float liquidN2 = snoise(vec3(withWave.yz * 1.2 + 3.0, uTime * 0.35 + aRandom.y * 6.0));
+    vec3 liquidOffset = vec3(liquidN, liquidN2, liquidN * 0.6) * uLiquid * 0.55;
+
+    float noiseAmt = 0.1 * (1.0 - uReducedMotion * 0.85);
+    float n1 = snoise(vec3(withWave.xy * 0.5, uTime * 0.15 + aRandom.x * 10.0));
+    float n2 = snoise(vec3(withWave.yz * 0.5 + 5.0, uTime * 0.13 + aRandom.y * 10.0));
+    vec3 displaced = withWave + liquidOffset + vec3(n1, n2 * 0.6, n1 * 0.4) * noiseAmt;
+
     vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
-    // Calibrated so a point at the camera's look-at distance (~9 units)
-    // renders at roughly uSize pixels.
     float sizeAttenuation = uSize * uPixelRatio * (9.0 / -mvPosition.z);
     gl_PointSize = sizeAttenuation;
     gl_Position = projectionMatrix * mvPosition;
 
-    // Crossing-point brightness: boosts near where a strand swings close
-    // to the central axis — where the two strands visually intersect.
+    // Crossing-point brightness only while in the helix->vortex segment.
     float radialDist = length(displaced.xz);
-    float crossBoost = smoothstep(HELIX_RADIUS_JS * 0.55, 0.0, radialDist) * (1.0 - uSpread);
+    float inHelixRange = step(2.5, uMorphT) * step(uMorphT, 3.5);
+    float crossBoost = smoothstep(${HELIX_RADIUS.toFixed(2)} * 0.55, 0.0, radialDist) * inHelixRange;
 
     vColor = mix(vec3(1.0, 0.616, 0.180), vec3(0.184, 0.902, 0.820), aT);
-    vAlpha = scale;
+    vColor = mix(vColor, vec3(0.85, 0.35, 0.95), uLiquid * 0.35);
+    vAlpha = uOpacity;
     vEdge = clamp(aEdge + crossBoost, 0.0, 1.0);
   }
-`.replace("HELIX_RADIUS_JS", String(HELIX_RADIUS));
+`;
 
 const fragmentShader = /* glsl */ `
   varying vec3 vColor;
@@ -119,45 +125,90 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-function generateGridData() {
-  const count = STRAND_COUNT * U_DIVISIONS * V_DIVISIONS;
-  const positions = new Float32Array(count * 3);
-  const aEdge = new Float32Array(count);
+function generateHelix(count: number) {
+  const STRANDS = 2;
+  const U = 90;
+  const V = 10; // 2*90*10 = 1800
+  const pos = new Float32Array(count * 3);
   const aT = new Float32Array(count);
-  const aRandom = new Float32Array(count * 2);
-
+  const aEdge = new Float32Array(count);
   let idx = 0;
-  for (let s = 0; s < STRAND_COUNT; s++) {
-    const strandPhase = s * Math.PI; // two strands, 180° apart
-
-    for (let ui = 0; ui < U_DIVISIONS; ui++) {
-      const u = ui / (U_DIVISIONS - 1);
-
-      const helixAngle = u * HELIX_TWISTS * Math.PI * 2 + strandPhase;
-      const ccx = Math.cos(helixAngle) * HELIX_RADIUS;
-      const ccz = Math.sin(helixAngle) * HELIX_RADIUS;
-      const ccy = (u - 0.5) * COLUMN_HEIGHT;
-      const radialX = Math.cos(helixAngle);
-      const radialZ = Math.sin(helixAngle);
-
-      for (let vi = 0; vi < V_DIVISIONS; vi++) {
-        const v = vi / (V_DIVISIONS - 1) - 0.5;
-
-        positions[idx * 3] = ccx + v * RIBBON_WIDTH * radialX;
-        positions[idx * 3 + 1] = ccy;
-        positions[idx * 3 + 2] = ccz + v * RIBBON_WIDTH * radialZ;
-
-        aEdge[idx] = Math.pow(Math.abs(v) * 2.0, 1.3);
+  for (let s = 0; s < STRANDS; s++) {
+    const phase = s * Math.PI;
+    for (let ui = 0; ui < U; ui++) {
+      const u = ui / (U - 1);
+      const angle = u * 2.5 * Math.PI * 2 + phase;
+      const cx = Math.cos(angle) * HELIX_RADIUS;
+      const cz = Math.sin(angle) * HELIX_RADIUS;
+      const cy = (u - 0.5) * 6;
+      const radialX = Math.cos(angle);
+      const radialZ = Math.sin(angle);
+      for (let vi = 0; vi < V; vi++) {
+        const v = vi / (V - 1) - 0.5;
+        pos[idx * 3] = cx + v * 0.34 * radialX;
+        pos[idx * 3 + 1] = cy;
+        pos[idx * 3 + 2] = cz + v * 0.34 * radialZ;
+        aEdge[idx] = Math.pow(Math.abs(v) * 2, 1.3);
         aT[idx] = u;
-        aRandom[idx * 2] = Math.random();
-        aRandom[idx * 2 + 1] = Math.random();
-
         idx++;
       }
     }
   }
+  return { pos, aT, aEdge };
+}
 
-  return { positions, aEdge, aT, aRandom, count };
+function generateOrb(count: number) {
+  const pos = new Float32Array(count * 3);
+  const RADIUS = 0.55;
+  const LAT = 45;
+  const LON = 40; // 45*40 = 1800
+  let idx = 0;
+  for (let i = 0; i < LAT; i++) {
+    const theta = (i / (LAT - 1)) * Math.PI;
+    for (let j = 0; j < LON; j++) {
+      const phi = (j / LON) * Math.PI * 2;
+      pos[idx * 3] = RADIUS * Math.sin(theta) * Math.cos(phi);
+      pos[idx * 3 + 1] = RADIUS * Math.cos(theta);
+      pos[idx * 3 + 2] = RADIUS * Math.sin(theta) * Math.sin(phi);
+      idx++;
+    }
+  }
+  return pos;
+}
+
+function generateSwirlParams(count: number) {
+  const arr = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    arr[i * 3] = 0.9 + Math.random() * 1.6;
+    arr[i * 3 + 1] = (Math.random() - 0.5) * 2.6;
+    arr[i * 3 + 2] = Math.random() * Math.PI * 2;
+  }
+  return arr;
+}
+
+function generateVortexParams(count: number) {
+  const arr = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const radius = 0.25 + Math.pow(Math.random(), 0.6) * 2.0;
+    const spiralTwist = radius * 2.2;
+    arr[i * 3] = radius;
+    arr[i * 3 + 1] = (radius - 1.1) * 0.5 + (Math.random() - 0.5) * 0.25;
+    arr[i * 3 + 2] = Math.random() * Math.PI * 2 + spiralTwist;
+  }
+  return arr;
+}
+
+function generateWave(count: number) {
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const x = (Math.random() - 0.5) * 18;
+    const z = (Math.random() - 0.5) * 3;
+    const y = Math.sin(x * 0.4 + 1.1) * 1.0 + Math.sin(x * 0.15 - 0.6) * 0.7 + (Math.random() - 0.5) * 0.5;
+    pos[i * 3] = x;
+    pos[i * 3 + 1] = y;
+    pos[i * 3 + 2] = z;
+  }
+  return pos;
 }
 
 function generateStarfieldPositions(count: number) {
@@ -170,11 +221,28 @@ function generateStarfieldPositions(count: number) {
   return arr;
 }
 
-// Computed once at module evaluation (not during render) — the geometry is
-// randomized but static for the page's lifetime, so this sidesteps the
-// render-purity rule around calling Math.random() inside component bodies.
-const GRID_DATA = generateGridData();
+// Computed once at module evaluation (not during render) — all pure math,
+// no DOM/canvas access — sidesteps the render-purity rule around calling
+// Math.random() inside component bodies.
+const HELIX = generateHelix(TOTAL_COUNT);
+const ORB_POS = generateOrb(TOTAL_COUNT);
+const SWIRL_PARAMS = generateSwirlParams(TOTAL_COUNT);
+const VORTEX_PARAMS = generateVortexParams(TOTAL_COUNT);
+const WAVE_POS = generateWave(TOTAL_COUNT);
 const STARFIELD_POSITIONS = generateStarfieldPositions(500);
+// Wordmark needs canvas text sampling (client-only); starts as a copy of
+// the orb so there's no flash of degenerate geometry before the real
+// sample runs in an effect, well before any user could scroll that far.
+const WORDMARK_POS = new Float32Array(ORB_POS);
+
+const RANDOM = (() => {
+  const arr = new Float32Array(TOTAL_COUNT * 2);
+  for (let i = 0; i < TOTAL_COUNT; i++) {
+    arr[i * 2] = Math.random();
+    arr[i * 2 + 1] = Math.random();
+  }
+  return arr;
+})();
 
 function Starfield() {
   const ref = useRef<THREE.Points>(null);
@@ -202,21 +270,38 @@ function Starfield() {
 
 function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const wordmarkAttrRef = useRef<THREE.BufferAttribute>(null);
   const timeRef = useRef(0);
+  const spinSpeedRef = useRef(0.4);
+  const spinAngleRef = useRef(0);
 
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
-      uSpread: { value: 1.4 },
-      uVortex: { value: 0 },
-      uDockFade: { value: 1 },
-      uGrowth: { value: 0 },
+      uMorphT: { value: 0 },
+      uWaveBlend: { value: 0 },
+      uLiquid: { value: 0 },
+      uVortexSpin: { value: 0 },
+      uOpacity: { value: 1 },
       uReducedMotion: { value: reducedMotion ? 1 : 0 },
       uPixelRatio: { value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 1.5) : 1 },
       uSize: { value: 2.0 },
     }),
     [reducedMotion]
   );
+
+  useEffect(() => {
+    const points = sampleTextPoints("D.N.A.");
+    if (points.length === 0 || !wordmarkAttrRef.current) return;
+    const arr = wordmarkAttrRef.current.array as Float32Array;
+    for (let i = 0; i < TOTAL_COUNT; i++) {
+      const [x, y] = points[i % points.length];
+      arr[i * 3] = x + (Math.random() - 0.5) * 0.05;
+      arr[i * 3 + 1] = y + (Math.random() - 0.5) * 0.05;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+    }
+    wordmarkAttrRef.current.needsUpdate = true;
+  }, []);
 
   useFrame((_, delta) => {
     timeRef.current += delta;
@@ -225,48 +310,72 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
     u.uTime.value = timeRef.current;
 
     if (!introState.done) {
-      // 0-8%: quick pop-in from the seed point.
-      // 8-55%: sparse wide cone (1A) -> condensing (1B) -> resolved double
-      // helix (1C) — one continuous spread interpolation, not discrete
-      // stage jumps.
-      // 55-65%: landing hold, fully resolved.
       const p = introState.progress;
-      const growthTarget = THREE.MathUtils.smoothstep(p, 0, 0.08);
-      const spreadTarget = THREE.MathUtils.lerp(1.4, 0, THREE.MathUtils.smoothstep(p, 0.08, 0.55));
-      u.uGrowth.value = THREE.MathUtils.lerp(u.uGrowth.value, growthTarget, 0.18);
-      u.uSpread.value = THREE.MathUtils.lerp(u.uSpread.value, spreadTarget, 0.1);
-      u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, introState.dockFade, 0.22);
-      u.uVortex.value = 0;
+      let morphT: number;
+      if (p < 0.15) morphT = mapRange(p, 0, 0.15, 0, 1);
+      else if (p < 0.3) morphT = 1;
+      else if (p < 0.45) morphT = mapRange(p, 0.3, 0.45, 1, 2);
+      else if (p < 0.6) morphT = mapRange(p, 0.45, 0.6, 2, 3);
+      else if (p < 0.75) morphT = mapRange(p, 0.6, 0.75, 3, 4);
+      else morphT = 4;
+      u.uMorphT.value = THREE.MathUtils.lerp(u.uMorphT.value, morphT, 0.25);
+
+      const liquidCenter = 0.225;
+      const liquidHalf = 0.075;
+      const liquidTarget = Math.max(0, 1 - Math.abs(p - liquidCenter) / liquidHalf);
+      u.uLiquid.value = THREE.MathUtils.lerp(u.uLiquid.value, liquidTarget, 0.2);
+      liquidIntensity.current = u.uLiquid.value;
+
+      u.uOpacity.value = THREE.MathUtils.lerp(u.uOpacity.value, 1, 0.2);
+      u.uWaveBlend.value = 0;
     } else {
-      // Part 2: driven by actual scroll position past the pin's own
-      // measured end (ScrollTrigger's real self.end) — no drift/jump at
-      // the Stage 3->4 handoff.
+      u.uLiquid.value = THREE.MathUtils.lerp(u.uLiquid.value, 0, 0.2);
+      liquidIntensity.current = u.uLiquid.value;
+      u.uMorphT.value = 4;
+
       const totalScroll = Math.max(
         document.documentElement.scrollHeight - window.innerHeight - introState.endScrollY,
         1
       );
       const rest = THREE.MathUtils.clamp((window.scrollY - introState.endScrollY) / totalScroll, 0, 1);
 
-      // Re-diverges from the resolved helix into a wide, dense sparkle
-      // cone/flow, then stays there for the remainder of the page.
-      const spreadTarget = THREE.MathUtils.lerp(0, 2.0, THREE.MathUtils.smoothstep(rest, 0.0, 0.22));
-      u.uGrowth.value = 1;
-      u.uDockFade.value = THREE.MathUtils.lerp(u.uDockFade.value, 1, 0.15);
-      u.uSpread.value = THREE.MathUtils.lerp(u.uSpread.value, spreadTarget, 0.06);
+      const waveBlendTarget = THREE.MathUtils.smoothstep(rest, 0.9, 0.99);
+      u.uWaveBlend.value = THREE.MathUtils.lerp(u.uWaveBlend.value, waveBlendTarget, 0.08);
 
-      const dist = Math.abs(rest - VORTEX_CENTER);
-      const vortexTarget = reducedMotion ? 0 : Math.max(0, 1 - dist / VORTEX_WIDTH);
-      u.uVortex.value = THREE.MathUtils.lerp(u.uVortex.value, vortexTarget, 0.08);
+      // Faint ambient presence during content scroll, fuller again for the
+      // closing wave in the empty space past all content.
+      const opacityTarget = THREE.MathUtils.lerp(0.2, 0.7, waveBlendTarget);
+      u.uOpacity.value = THREE.MathUtils.lerp(u.uOpacity.value, opacityTarget, 0.1);
     }
+
+    // Vortex spin speed follows scroll velocity in real time, damped so it
+    // never snaps — fast scrolling spins it up, stopping eases it back to
+    // a slow idle rather than an abrupt halt.
+    const targetSpeed = reducedMotion ? 0.15 : 0.4 + Math.min(Math.abs(scrollVelocity.current) * 0.15, 3.5);
+    spinSpeedRef.current = THREE.MathUtils.lerp(spinSpeedRef.current, targetSpeed, 0.05);
+    spinAngleRef.current += spinSpeedRef.current * delta;
+    u.uVortexSpin.value = spinAngleRef.current;
   });
 
   return (
     <points>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[GRID_DATA.positions, 3]} />
-        <bufferAttribute attach="attributes-aRandom" args={[GRID_DATA.aRandom, 2]} />
-        <bufferAttribute attach="attributes-aT" args={[GRID_DATA.aT, 1]} />
-        <bufferAttribute attach="attributes-aEdge" args={[GRID_DATA.aEdge, 1]} />
+        {/* Three.js needs a standard `position` attribute present to know
+            the vertex count for the draw call and to compute a bounding
+            sphere for frustum culling — without one, the whole object gets
+            silently culled even though the shader computes real position
+            entirely from the custom attributes below (this value is
+            never read). */}
+        <bufferAttribute attach="attributes-position" args={[HELIX.pos, 3]} />
+        <bufferAttribute attach="attributes-pSwirlParams" args={[SWIRL_PARAMS, 3]} />
+        <bufferAttribute attach="attributes-pOrb" args={[ORB_POS, 3]} />
+        <bufferAttribute ref={wordmarkAttrRef} attach="attributes-pWordmark" args={[WORDMARK_POS, 3]} />
+        <bufferAttribute attach="attributes-pHelix" args={[HELIX.pos, 3]} />
+        <bufferAttribute attach="attributes-pVortexParams" args={[VORTEX_PARAMS, 3]} />
+        <bufferAttribute attach="attributes-pWave" args={[WAVE_POS, 3]} />
+        <bufferAttribute attach="attributes-aRandom" args={[RANDOM, 2]} />
+        <bufferAttribute attach="attributes-aT" args={[HELIX.aT, 1]} />
+        <bufferAttribute attach="attributes-aEdge" args={[HELIX.aEdge, 1]} />
       </bufferGeometry>
       <shaderMaterial
         ref={materialRef}
@@ -279,6 +388,19 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
       />
     </points>
   );
+}
+
+function ChromaticAberrationEffect() {
+  const ref = useRef<{ offset: THREE.Vector2 } | null>(null);
+
+  useFrame(() => {
+    if (!ref.current) return;
+    const amt = liquidIntensity.current * 0.006;
+    ref.current.offset.set(amt, amt * 0.6);
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return <ChromaticAberration ref={ref as any} offset={[0, 0]} />;
 }
 
 function FallbackBackground() {
@@ -295,21 +417,42 @@ function FallbackBackground() {
 
 export default function ParticleField() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   const [mode, setMode] = useState<"loading" | "particles" | "fallback">("loading");
   const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    // Stages 0-6 need the particle canvas ABOVE all page content (with an
+    // opaque backdrop) so nothing else is visible during the intro; Part 2
+    // needs it BEHIND content (its normal z-0 spot). Toggling z-index and
+    // fading the backdrop here — reading introState directly every frame
+    // via its own rAF loop — is simpler and more precise than polling from
+    // a timer or threading a callback through IntroSequence.
+    if (mode !== "particles") return;
+    let raf = 0;
+    const tick = () => {
+      const p = introState.progress;
+      const done = introState.done;
+      const backdropOpacity = done ? 0 : Math.max(0, 1 - Math.max(0, (p - 0.92) / 0.08));
+      if (backdropRef.current) backdropRef.current.style.opacity = String(backdropOpacity);
+      if (containerRef.current) containerRef.current.style.zIndex = done ? "0" : "200";
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mode]);
 
   useEffect(() => {
     // Deliberate: matchMedia/hardwareConcurrency only exist client-side, so
     // this can't be a lazy useState initializer without risking a
     // server/client render mismatch — "loading" (renders nothing) is the
     // correct, matching first paint on both.
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = false; // TEMP-TEST-BYPASS
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setReducedMotion(reduced);
     // Reduced motion gets the same plain fallback as a low-end device — no
-    // WebGL animation at all, just the static docked logo and a calm
-    // gradient. The one unambiguous reading of "skip to the end state."
+    // WebGL animation at all, just the static content and a calm gradient.
     setMode(reduced || isLowEndDevice() ? "fallback" : "particles");
   }, []);
 
@@ -347,18 +490,24 @@ export default function ParticleField() {
 
   return (
     <>
-      <div ref={containerRef} className="pointer-events-none fixed inset-0 z-0">
+      <div ref={containerRef} className="pointer-events-none fixed inset-0" style={{ zIndex: 200 }}>
+        <div ref={backdropRef} className="absolute inset-0" style={{ background: "#060608" }} />
         <Canvas
           dpr={[1, 1.5]}
           gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
           camera={{ position: [0, 0, 9], fov: 55 }}
           frameloop={visible ? "always" : "never"}
+          onCreated={(state) => {
+            // @ts-expect-error TEMP-TEST-HOOK
+            window.__r3f = state;
+          }}
         >
           <Suspense fallback={null}>
             <Selection>
-              {/* Bloom is isolated to the particle grid only, via Select —
-                  the starfield and all page text/DOM content (outside
-                  this WebGL scene entirely) are unaffected either way. */}
+              {/* Bloom + chromatic aberration are isolated to the particle
+                  grid only, via Select — the starfield and all page
+                  text/DOM content (outside this WebGL scene entirely) are
+                  unaffected either way. */}
               <EffectComposer multisampling={0} autoClear={false}>
                 <SelectiveBloom
                   intensity={0.35}
@@ -367,6 +516,7 @@ export default function ParticleField() {
                   mipmapBlur
                   radius={0.4}
                 />
+                <ChromaticAberrationEffect />
               </EffectComposer>
               <Starfield />
               <Select enabled>

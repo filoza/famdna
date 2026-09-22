@@ -5,6 +5,7 @@ import Lenis from "lenis";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { scrollProgress } from "@/lib/scrollProgress";
+import { scrollVelocity } from "@/lib/scrollVelocity";
 
 export default function SmoothScroll() {
   useEffect(() => {
@@ -19,8 +20,9 @@ export default function SmoothScroll() {
       smoothWheel: !prefersReducedMotion,
     });
 
-    lenis.on("scroll", (e: { progress: number }) => {
+    lenis.on("scroll", (e: { progress: number; velocity: number }) => {
       scrollProgress.current = e.progress;
+      scrollVelocity.current = e.velocity;
       ScrollTrigger.update();
     });
 

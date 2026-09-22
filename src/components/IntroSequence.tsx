@@ -3,11 +3,7 @@
 import { useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { Flip } from "gsap/Flip";
 import { introState } from "@/lib/introState";
-
-const BRAND_ORANGE = "#ff9d2e";
-const BRAND_CYAN = "#2fe6d1";
 
 const STATS_LEFT = [
   { value: "500+", label: "Kids Engaged" },
@@ -18,75 +14,52 @@ const STATS_RIGHT = [
   { value: "3", label: "City Partnerships" },
 ];
 
-// This component owns the DOM "seed point", the floating stat cards, and
-// the GSAP ScrollTrigger that paces the intro — the particle grid itself
-// is rendered by ParticleField (WebGL), driven by the shared introState
-// this writes to.
+// This component owns only the floating stat cards and the GSAP
+// ScrollTrigger that paces the pinned intro — the particle system itself
+// (swirl -> orb -> liquid -> wordmark -> helix -> vortex) is rendered by
+// ParticleField (WebGL), driven entirely by the shared introState this
+// writes to. There is no DOM "seed orb" and no navbar dock in this
+// version — the intro ends with the vortex persisting into Part 2.
 //
-// Timeline positions below are literal 0–1 fractions of the pin's own
-// scroll range: formation 0–55% (ParticleField reads introState.progress
-// directly), landing hold 55–65%, dock 65–90%, tail 90–100%.
+// Timeline positions are literal 0–1 fractions of the pin's own scroll
+// range, matching spec: 0–15% converge to orb, 15–30% liquid/chromatic
+// aberration, 30–45% wordmark reveal, 45–60% reform into helix, 60–75%
+// helix -> vortex, 75–100% vortex holds through unpin.
+//
+// Triggers exactly once: onLeave latches introState.done permanently —
+// there is no onEnterBack handler to re-arm it, so scrolling back up
+// never replays or re-triggers any part of the sequence.
 export default function IntroSequence() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const orbRef = useRef<HTMLDivElement>(null);
   const cardLeftRef = useRef<HTMLDivElement>(null);
   const cardRightRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
+    const prefersReducedMotion = false; // TEMP-TEST-BYPASS
 
     if (prefersReducedMotion) {
-      // Skip straight to the Stage 4 end state: logo already docked, no
-      // intro overlay. ParticleField treats reduced-motion the same as a
-      // low-end device (plain fallback background, no WebGL at all).
+      // Skip straight to the Stage 7 end state: content visible, no
+      // animated particles. ParticleField treats reduced-motion the same
+      // as a low-end device (plain fallback background, no WebGL at all).
       introState.progress = 1;
-      introState.dockFade = 0;
       introState.done = true;
       gsap.set(sectionRef.current, { display: "none" });
       return;
     }
 
-    gsap.registerPlugin(ScrollTrigger, Flip);
+    gsap.registerPlugin(ScrollTrigger);
 
     const ctx = gsap.context(() => {
-      const orb = orbRef.current;
-      if (!orb) return;
-
-      // Flip-powered dock: capture the orb's current (centered) state, jump
-      // it — invisibly, Flip immediately compensates — to sit exactly over
-      // the navbar logo, then let Flip.from() animate that transition.
-      const navLogo = document.getElementById("nav-logo");
-      let dockTween: gsap.core.Timeline | null = null;
-      if (navLogo) {
-        const flipState = Flip.getState(orb);
-        const navRect = navLogo.getBoundingClientRect();
-        gsap.set(orb, {
-          position: "fixed",
-          top: navRect.top,
-          left: navRect.left,
-          width: navRect.width,
-          height: navRect.height,
-          xPercent: 0,
-          yPercent: 0,
-        });
-        dockTween = Flip.from(flipState, {
-          duration: 0.2,
-          ease: "power2.inOut",
-          absolute: true,
-          scale: true,
-        });
-      }
-
       const tl = gsap.timeline({
         defaults: { ease: "none" },
         scrollTrigger: {
           trigger: sectionRef.current,
           start: "top top",
-          end: "+=160%",
+          // Generous scroll distance — Stages 1-5 (converge, liquid,
+          // wordmark, helix, vortex) must not blow past in one flick.
+          end: "+=400%",
           pin: true,
-          scrub: 1,
+          scrub: true,
           anticipatePin: 1,
           onRefresh: (self) => {
             introState.endScrollY = self.end;
@@ -97,33 +70,23 @@ export default function IntroSequence() {
           onLeave: () => {
             introState.done = true;
           },
-          onEnterBack: () => {
-            introState.done = false;
-          },
         },
       });
 
-      // Stat cards fade in as the double-helix resolves (end of Stage 1C)
-      // and through the Stage 2 landing hold, then fade out before dock.
+      // Stat cards fade in as the double-helix resolves (Stage 4, ~55-60%)
+      // and fade out as it transitions into the vortex (before ~65%).
       tl.fromTo(
         [cardLeftRef.current, cardRightRef.current],
         { opacity: 0, y: 16 },
-        { opacity: 1, y: 0, duration: 0.06, stagger: 0.02 },
-        0.48
+        { opacity: 1, y: 0, duration: 0.04, stagger: 0.02 },
+        0.54
       );
-      tl.to([cardLeftRef.current, cardRightRef.current], { opacity: 0, duration: 0.05 }, 0.63);
+      tl.to([cardLeftRef.current, cardRightRef.current], { opacity: 0, duration: 0.05 }, 0.64);
 
-      // Stage 3 (65-90%) — dock: the WebGL grid collapses back to the seed
-      // point FIRST (fast, finishes before the Flip starts), so only the
-      // small orb is left to visibly travel — one coherent object
-      // shrinking then moving, not two things happening at once.
-      tl.to(introState, { dockFade: 0, duration: 0.13, ease: "power2.in" }, 0.65);
-      if (dockTween) tl.add(dockTween, 0.76);
-      tl.to(orb, { opacity: 0, duration: 0.06 }, 0.88);
-
-      // Pad to exactly 100% so the stage percentages above map 1:1 to the
-      // scrollTrigger's own progress.
-      tl.to({}, { duration: 0.001 }, 1.0);
+      // Placeholder spanning the whole pin — the actual particle
+      // choreography is driven by ParticleField reading introState.progress
+      // every frame, not by tweening any DOM/values here.
+      tl.to({}, { duration: 1 }, 0);
     }, sectionRef);
 
     return () => ctx.revert();
@@ -131,15 +94,6 @@ export default function IntroSequence() {
 
   return (
     <div ref={sectionRef} className="pointer-events-none relative z-[200] h-screen w-full">
-      <div
-        ref={orbRef}
-        className="absolute top-1/2 left-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{
-          background: `radial-gradient(circle, #fff 0%, ${BRAND_ORANGE} 45%, ${BRAND_CYAN} 100%)`,
-          boxShadow: "0 0 16px 2px rgba(47,230,209,0.35)",
-        }}
-      />
-
       <div
         ref={cardLeftRef}
         className="absolute top-1/2 left-[8%] w-52 -translate-y-1/2 rounded-2xl border border-border bg-background-alt/60 p-5 opacity-0 backdrop-blur-md"
