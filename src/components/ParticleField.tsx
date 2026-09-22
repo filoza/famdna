@@ -117,9 +117,13 @@ const fragmentShader = /* glsl */ `
     float glow = smoothstep(0.5, 0.0, d);
     float core = smoothstep(0.15, 0.0, d);
 
-    float brightness = mix(0.32, 1.0, vEdge);
-    vec3 color = vColor * brightness + core * 0.5 * vEdge;
-    float alpha = glow * vAlpha * mix(0.35, 1.0, vEdge);
+    // Edge particles read as the bright core row (up to full brightness);
+    // interior particles stay dim but never below a 0.4 floor — clear
+    // contrast, not uniform faintness.
+    float brightness = mix(0.4, 1.0, vEdge);
+    vec3 color = vColor * brightness + core * 0.6 * vEdge;
+    float alphaFloor = mix(0.4, 1.0, vEdge);
+    float alpha = glow * vAlpha * alphaFloor;
 
     gl_FragColor = vec4(color, alpha);
   }
@@ -285,7 +289,7 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
       uOpacity: { value: 1 },
       uReducedMotion: { value: reducedMotion ? 1 : 0 },
       uPixelRatio: { value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 1.5) : 1 },
-      uSize: { value: 2.0 },
+      uSize: { value: 2.6 },
     }),
     [reducedMotion]
   );
@@ -311,17 +315,22 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
 
     if (!introState.done) {
       const p = introState.progress;
+      // Stage 1 (0-12%) swirl->orb, Stage 2 (12-22%) liquid reveal holds
+      // the orb shape, Stage 3 (22-38%) orb->wordmark, Stage 4 (38-52%)
+      // wordmark->helix, Stage 5 (52-60%) helix collapses into the vortex,
+      // then a real hold at full vortex (60-100%) — a ~40% span, well past
+      // the 15-20% minimum — through the dock (Stage 7, ~86-95%) and unpin.
       let morphT: number;
-      if (p < 0.15) morphT = mapRange(p, 0, 0.15, 0, 1);
-      else if (p < 0.3) morphT = 1;
-      else if (p < 0.45) morphT = mapRange(p, 0.3, 0.45, 1, 2);
-      else if (p < 0.6) morphT = mapRange(p, 0.45, 0.6, 2, 3);
-      else if (p < 0.75) morphT = mapRange(p, 0.6, 0.75, 3, 4);
+      if (p < 0.12) morphT = mapRange(p, 0, 0.12, 0, 1);
+      else if (p < 0.22) morphT = 1;
+      else if (p < 0.38) morphT = mapRange(p, 0.22, 0.38, 1, 2);
+      else if (p < 0.52) morphT = mapRange(p, 0.38, 0.52, 2, 3);
+      else if (p < 0.6) morphT = mapRange(p, 0.52, 0.6, 3, 4);
       else morphT = 4;
       u.uMorphT.value = THREE.MathUtils.lerp(u.uMorphT.value, morphT, 0.25);
 
-      const liquidCenter = 0.225;
-      const liquidHalf = 0.075;
+      const liquidCenter = 0.17;
+      const liquidHalf = 0.06;
       const liquidTarget = Math.max(0, 1 - Math.abs(p - liquidCenter) / liquidHalf);
       u.uLiquid.value = THREE.MathUtils.lerp(u.uLiquid.value, liquidTarget, 0.2);
       liquidIntensity.current = u.uLiquid.value;
@@ -342,9 +351,10 @@ function ParticleGrid({ reducedMotion }: { reducedMotion: boolean }) {
       const waveBlendTarget = THREE.MathUtils.smoothstep(rest, 0.9, 0.99);
       u.uWaveBlend.value = THREE.MathUtils.lerp(u.uWaveBlend.value, waveBlendTarget, 0.08);
 
-      // Faint ambient presence during content scroll, fuller again for the
-      // closing wave in the empty space past all content.
-      const opacityTarget = THREE.MathUtils.lerp(0.2, 0.7, waveBlendTarget);
+      // Faint ambient presence during content scroll (never below the 0.4
+      // floor — dim, not gone), fuller again for the closing wave in the
+      // empty space past all content.
+      const opacityTarget = THREE.MathUtils.lerp(0.4, 0.75, waveBlendTarget);
       u.uOpacity.value = THREE.MathUtils.lerp(u.uOpacity.value, opacityTarget, 0.1);
     }
 
@@ -434,7 +444,10 @@ export default function ParticleField() {
     const tick = () => {
       const p = introState.progress;
       const done = introState.done;
-      const backdropOpacity = done ? 0 : Math.max(0, 1 - Math.max(0, (p - 0.92) / 0.08));
+      // Stays fully opaque through the Stage 7 dock (ends ~95%) so page
+      // content never peeks through behind the particles before the pin
+      // actually releases; only fades in the last few percent.
+      const backdropOpacity = done ? 0 : Math.max(0, 1 - Math.max(0, (p - 0.96) / 0.04));
       if (backdropRef.current) backdropRef.current.style.opacity = String(backdropOpacity);
       if (containerRef.current) containerRef.current.style.zIndex = done ? "0" : "200";
       raf = requestAnimationFrame(tick);
@@ -448,7 +461,7 @@ export default function ParticleField() {
     // this can't be a lazy useState initializer without risking a
     // server/client render mismatch — "loading" (renders nothing) is the
     // correct, matching first paint on both.
-    const reduced = false; // TEMP-TEST-BYPASS
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setReducedMotion(reduced);
     // Reduced motion gets the same plain fallback as a low-end device — no
@@ -497,10 +510,6 @@ export default function ParticleField() {
           gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
           camera={{ position: [0, 0, 9], fov: 55 }}
           frameloop={visible ? "always" : "never"}
-          onCreated={(state) => {
-            // @ts-expect-error TEMP-TEST-HOOK
-            window.__r3f = state;
-          }}
         >
           <Suspense fallback={null}>
             <Selection>

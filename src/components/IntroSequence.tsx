@@ -14,17 +14,19 @@ const STATS_RIGHT = [
   { value: "3", label: "City Partnerships" },
 ];
 
-// This component owns only the floating stat cards and the GSAP
-// ScrollTrigger that paces the pinned intro — the particle system itself
-// (swirl -> orb -> liquid -> wordmark -> helix -> vortex) is rendered by
-// ParticleField (WebGL), driven entirely by the shared introState this
-// writes to. There is no DOM "seed orb" and no navbar dock in this
-// version — the intro ends with the vortex persisting into Part 2.
+// This component owns the floating stat cards and the GSAP ScrollTrigger
+// that paces the pinned intro — the particle system itself (swirl -> orb ->
+// liquid -> wordmark -> helix -> vortex) is rendered by ParticleField
+// (WebGL), driven entirely by the shared introState this writes to. No DOM
+// orb/blob of any kind — the WebGL vortex itself persists into Part 2
+// (Stage 6/9), no separate docking element.
 //
 // Timeline positions are literal 0–1 fractions of the pin's own scroll
-// range, matching spec: 0–15% converge to orb, 15–30% liquid/chromatic
-// aberration, 30–45% wordmark reveal, 45–60% reform into helix, 60–75%
-// helix -> vortex, 75–100% vortex holds through unpin.
+// range: 0–12% converge to orb, 12–22% liquid/chromatic-aberration reveal,
+// 22–38% wordmark emerges through it, 38–52% reforms into the double helix
+// (stat cards), 52–60% helix collapses into the vortex, 60–100% vortex
+// holds + spins (a real ~40% hold, well past the 15-20% minimum) through
+// unpin at 100%.
 //
 // Triggers exactly once: onLeave latches introState.done permanently —
 // there is no onEnterBack handler to re-arm it, so scrolling back up
@@ -35,10 +37,12 @@ export default function IntroSequence() {
   const cardRightRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const prefersReducedMotion = false; // TEMP-TEST-BYPASS
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
 
     if (prefersReducedMotion) {
-      // Skip straight to the Stage 7 end state: content visible, no
+      // Skip straight to the Stage 8 end state: content visible, no
       // animated particles. ParticleField treats reduced-motion the same
       // as a low-end device (plain fallback background, no WebGL at all).
       introState.progress = 1;
@@ -55,8 +59,9 @@ export default function IntroSequence() {
         scrollTrigger: {
           trigger: sectionRef.current,
           start: "top top",
-          // Generous scroll distance — Stages 1-5 (converge, liquid,
-          // wordmark, helix, vortex) must not blow past in one flick.
+          // Generous scroll distance — Stages 1-6 (converge, liquid,
+          // wordmark, helix, vortex hold) must not blow past in one quick
+          // flick.
           end: "+=400%",
           pin: true,
           scrub: true,
@@ -73,15 +78,16 @@ export default function IntroSequence() {
         },
       });
 
-      // Stat cards fade in as the double-helix resolves (Stage 4, ~55-60%)
-      // and fade out as it transitions into the vortex (before ~65%).
+      // Stat cards fade in as the double-helix resolves (Stage 4, ~50%)
+      // and fade out as it starts collapsing into the vortex (before 56%),
+      // well clear of the vortex hold that follows.
       tl.fromTo(
         [cardLeftRef.current, cardRightRef.current],
         { opacity: 0, y: 16 },
         { opacity: 1, y: 0, duration: 0.04, stagger: 0.02 },
-        0.54
+        0.46
       );
-      tl.to([cardLeftRef.current, cardRightRef.current], { opacity: 0, duration: 0.05 }, 0.64);
+      tl.to([cardLeftRef.current, cardRightRef.current], { opacity: 0, duration: 0.04 }, 0.56);
 
       // Placeholder spanning the whole pin — the actual particle
       // choreography is driven by ParticleField reading introState.progress
