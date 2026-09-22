@@ -44,9 +44,15 @@ export default function Programs() {
         <div className="mt-16 border-b border-border">
           {PROGRAMS.map((program, i) => (
             <Reveal key={program.title}>
-              <div className="group grid grid-cols-[3rem_1fr] items-start gap-4 border-t border-border py-8 transition-colors sm:grid-cols-[5rem_1fr_1fr] sm:items-center sm:gap-8">
+              <div
+                className={`group grid grid-cols-[3rem_1fr] items-start gap-4 border-t border-border px-4 py-8 -mx-4 transition-colors duration-[250ms] ease-[var(--ease-out)] sm:grid-cols-[5rem_1fr_1fr] sm:items-center sm:gap-8 ${
+                  program.accent === "orange"
+                    ? "hover:border-t-orange/40 hover:bg-orange/5"
+                    : "hover:border-t-cyan/40 hover:bg-cyan/5"
+                }`}
+              >
                 <span
-                  className={`font-display text-xl text-muted transition-colors ${
+                  className={`font-display text-xl text-muted transition-colors duration-[250ms] ease-[var(--ease-out)] ${
                     program.accent === "orange"
                       ? "group-hover:text-orange"
                       : "group-hover:text-cyan"
@@ -54,7 +60,7 @@ export default function Programs() {
                 >
                   0{i + 1}
                 </span>
-                <h3 className="font-display text-2xl font-medium transition-transform duration-300 group-hover:translate-x-2 sm:text-3xl">
+                <h3 className="font-display text-2xl font-medium transition-transform duration-[250ms] ease-[var(--ease-out)] group-hover:translate-x-2 sm:text-3xl">
                   {program.title}
                 </h3>
                 <p className="col-span-2 mt-2 text-muted sm:col-span-1 sm:mt-0 sm:max-w-sm">

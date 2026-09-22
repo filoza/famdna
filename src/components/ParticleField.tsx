@@ -225,6 +225,24 @@ function generateStarfieldPositions(count: number) {
   return arr;
 }
 
+// Tints each star orange or cyan (the same two brand hues as the main
+// particle system, via THREE.Color's built-in sRGB hex parsing) instead of
+// a generic off-brand blue, with a little per-star brightness variance so
+// the field doesn't read as two flat, uniform colors.
+function generateStarfieldColors(count: number) {
+  const orange = new THREE.Color("#f2a878");
+  const cyan = new THREE.Color("#8fd4c6");
+  const arr = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const base = Math.random() < 0.5 ? orange : cyan;
+    const shade = 0.7 + Math.random() * 0.5;
+    arr[i * 3] = base.r * shade;
+    arr[i * 3 + 1] = base.g * shade;
+    arr[i * 3 + 2] = base.b * shade;
+  }
+  return arr;
+}
+
 // Computed once at module evaluation (not during render) — all pure math,
 // no DOM/canvas access — sidesteps the render-purity rule around calling
 // Math.random() inside component bodies.
@@ -234,6 +252,7 @@ const SWIRL_PARAMS = generateSwirlParams(TOTAL_COUNT);
 const VORTEX_PARAMS = generateVortexParams(TOTAL_COUNT);
 const WAVE_POS = generateWave(TOTAL_COUNT);
 const STARFIELD_POSITIONS = generateStarfieldPositions(500);
+const STARFIELD_COLORS = generateStarfieldColors(500);
 // Wordmark needs canvas text sampling (client-only); starts as a copy of
 // the orb so there's no flash of degenerate geometry before the real
 // sample runs in an effect, well before any user could scroll that far.
@@ -259,10 +278,11 @@ function Starfield() {
     <points ref={ref}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[STARFIELD_POSITIONS, 3]} />
+        <bufferAttribute attach="attributes-color" args={[STARFIELD_COLORS, 3]} />
       </bufferGeometry>
       <pointsMaterial
         size={0.045}
-        color="#9fd6ff"
+        vertexColors
         transparent
         opacity={0.35}
         sizeAttenuation
